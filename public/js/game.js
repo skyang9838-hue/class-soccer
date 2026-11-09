@@ -1,10 +1,10 @@
 // 경기 계산 — 서버·화면과 떨어진 순수 코드. 단위는 도트 1칸(px).
-// 화면은 320×150 도트를 정수배로 키워 그린다. 서버(src/worker.js)와 혼자 연습(solo.js)이 같이 쓴다.
+// 화면은 426×200 도트를 정수배로 키워 그린다. 서버(src/worker.js)와 혼자 연습(solo.js)이 같이 쓴다.
 
-export const W = 320;
-export const H = 150;
-export const FIELD = { left: 10, right: 310, top: 12, bottom: 142 };
-export const GOAL_HALF = 18; // 골문 높이의 절반
+export const W = 426;
+export const H = 200;
+export const FIELD = { left: 12, right: 414, top: 16, bottom: 190 };
+export const GOAL_HALF = 22; // 골문 높이의 절반
 export const GOAL_DEPTH = 8;
 export const CY = (FIELD.top + FIELD.bottom) / 2;
 export const CX = (FIELD.left + FIELD.right) / 2;
@@ -17,22 +17,22 @@ export const GOAL_PAUSE = 2.2;
 
 const PLAYER_R = 4;
 const BALL_R = 2.5;
-const PLAYER_SPEED = 62;
-const DRIBBLE_SPEED = 54; // 공을 가지면 조금 느리다
+const PLAYER_SPEED = 56;
+const DRIBBLE_SPEED = 48; // 공을 가지면 조금 느리다
 const BALL_DECAY = 1.1; // 초당 감속 (지수)
 const BALL_MAX = 240;
-const SHOOT_SPEED = 220;
-const PASS_MIN = 70;
-const PASS_MAX = 150;
+const SHOOT_SPEED = 200;
+const PASS_MIN = 65;
+const PASS_MAX = 135;
 const KICK_RANGE = PLAYER_R + BALL_R + 4;
 const KICK_COOLDOWN = 0.3;
 const WALL_BOUNCE = 0.8;
-const CATCH_SPEED = 130; // 이보다 빠른 공은 몸에 맞고 튕긴다
+const CATCH_SPEED = 120; // 이보다 빠른 공은 몸에 맞고 튕긴다
 const CARRY_GAP = PLAYER_R + BALL_R + 1; // 드리블할 때 공이 발 앞 이만큼
 const NO_CATCH_AFTER_KICK = 0.25;
 // 태클
 const TACKLE_TIME = 0.24;
-const TACKLE_SPEED = 130;
+const TACKLE_SPEED = 115;
 const TACKLE_COOL = 0.9;
 const TACKLE_REACH = PLAYER_R + BALL_R + 4;
 const STUN_TIME = 0.7;

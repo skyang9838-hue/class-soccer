@@ -1,12 +1,8 @@
-// 도트 그림 — 320×150 도트에 그리고 화면에서 정수배로 키운다.
+// 도트 그림 — 426×200 도트에 그리고 화면에서 정수배로 키운다.
 // 서버 game.js 의 경기장 숫자와 같아야 한다.
-export const W = 320;
-export const H = 150;
-export const FIELD = { left: 10, right: 310, top: 12, bottom: 142 };
-export const GOAL_HALF = 18;
-export const GOAL_DEPTH = 8;
-export const CX = 160;
-export const CY = 77;
+// 경기장 숫자는 game.js 한 곳에서 가져온다
+import { W, H, FIELD, GOAL_HALF, GOAL_DEPTH, CX, CY } from './game.js';
+export { W, H, FIELD, GOAL_HALF, GOAL_DEPTH, CX, CY };
 
 export const TEAM = {
   red: { j: '#e43b44', J: '#a22633', w: '#ffffff', name: '빨강' },
@@ -115,12 +111,12 @@ function buildField() {
   g.fillRect(FIELD.right, FIELD.top - 2, 2, FIELD.bottom - FIELD.top + 4);
   // 선
   g.fillStyle = 'rgba(255,255,255,0.85)';
-  g.fillRect(CX, FIELD.top, 1, FIELD.bottom - FIELD.top);
-  pixelCircle(g, CX, CY, 18);
-  g.fillRect(CX - 1, CY - 1, 3, 3);
+  g.fillRect(Math.round(CX), FIELD.top, 1, FIELD.bottom - FIELD.top);
+  pixelCircle(g, Math.round(CX), Math.round(CY), 24);
+  g.fillRect(Math.round(CX) - 1, Math.round(CY) - 1, 3, 3);
   // 골 앞 상자
-  box(g, FIELD.left, CY - 32, 30, 64);
-  box(g, FIELD.right - 30, CY - 32, 30, 64);
+  box(g, FIELD.left, Math.round(CY) - 42, 40, 84);
+  box(g, FIELD.right - 40, Math.round(CY) - 42, 40, 84);
   // 골대 (벽 뒤로 파인 그물)
   for (const side of [-1, 1]) {
     const x0 = side < 0 ? FIELD.left - GOAL_DEPTH - 2 : FIELD.right;
