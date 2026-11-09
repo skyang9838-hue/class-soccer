@@ -279,6 +279,8 @@ export class ClassRoom extends DurableObject {
         this.endMatch(false);
         break;
       case 'next':
+        // 다음 판은 모두 관전에서 시작 → 선생님이 랜덤(안 뛴 아이 먼저)이나 직접 넣기로 짠다
+        for (const k of this.roster.kids.values()) k.team = null;
         this.view = 'lobby';
         this.lastResult = null;
         this.broadcast({ t: 'lobbyView' });
@@ -413,6 +415,7 @@ export class ClassRoom extends DurableObject {
       on: k.connected,
       team: k.team,
       g: k.g,
+      last: this.roster.round > 0 && k.lastPlayed === this.roster.round, // 방금 판에 뜀
     }));
     return { t: 'lobby', kids, view: this.view };
   }

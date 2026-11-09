@@ -73,7 +73,8 @@ function open(c) {
   current = c;
   wantConnect = true;
   $('lobbyClass').textContent = c.name + ' 반';
-  $('addr').textContent = location.host;
+  // 배포 주소면 아이들이 치기 쉬운 짧은 주소를 보여 준다
+  $('addr').textContent = location.host.endsWith('workers.dev') ? 'is.gd/classsoccer' : location.host;
   connect();
 }
 
@@ -160,7 +161,7 @@ function renderLobby() {
   const chip = (k) => `
     <span class="chip ${k.team || ''} ${k.on ? '' : 'off'}">
       <button class="g ${k.g || 'none'}" data-gender="${esc(k.name)}" title="성별 고치기">${k.g === 'm' ? '♂' : k.g === 'f' ? '♀' : '?'}</button>
-      <button data-cycle="${esc(k.name)}" title="팀 바꾸기">${esc(k.name)}${k.on ? '' : ' (나감)'}</button>
+      <button data-cycle="${esc(k.name)}" title="${k.last ? '방금 판에 뛴 아이' : '팀 바꾸기'}">${k.last ? '🔁' : ''}${esc(k.name)}${k.on ? '' : ' (나감)'}</button>
       <button class="x" data-kick="${esc(k.name)}" title="내보내기">✕</button>
     </span>`;
   const red = kids.filter((k) => k.team === 'red');
