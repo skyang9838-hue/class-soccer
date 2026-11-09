@@ -9,6 +9,7 @@ import {
   teamsOf,
   markPlayed,
   canStart,
+  cycleGender,
 } from '../src/room.js';
 
 function seeded(seed = 1) {
@@ -98,5 +99,21 @@ describe('방', () => {
     cycleTeam(r, '나');
     expect(canStart(r)).toBe(true);
     expect(teamsOf(r)).toEqual({ red: ['가'], blue: ['나'], bench: [] });
+  });
+
+  it('남자판·여자판: 그 성별 아이만 뛰고, 성별은 고칠 수 있다', () => {
+    const r = createRoster();
+    for (let i = 0; i < 5; i++) join(r, '남' + i, 'm');
+    for (let i = 0; i < 4; i++) join(r, '여' + i, 'f');
+    join(r, '모름');
+    const t = randomTeams(r, 12, seeded(4), 'f');
+    const playing = [...t.red, ...t.blue];
+    expect(playing.sort()).toEqual(['여0', '여1', '여2', '여3']);
+    expect(t.bench).toContain('남0');
+    const all = randomTeams(r, 12, seeded(4), 'all');
+    expect(all.red.length + all.blue.length).toBe(10);
+    cycleGender(r, '모름');
+    expect(r.kids.get('모름').g).toBe('m');
+    expect(join(r, '이상', 'x').kid.g).toBe(null);
   });
 });

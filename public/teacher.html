@@ -73,12 +73,15 @@
     <div class="col"><h3>관전·대기 <span id="nBench"></span></h3><div id="cBench"></div></div>
   </div>
   <div class="bar">
-    <span class="sub" style="margin:0">이름을 누르면 빨강 → 파랑 → 관전 · ✕ 내보내기</span>
+    <span class="sub" style="margin:0">이름: 빨강 → 파랑 → 관전 · ♂♀: 성별 고치기 · ✕ 내보내기</span>
     <span class="sp"></span>
     <label class="sub" style="margin:0">한 판 최대
       <select id="max" class="field" style="width:auto;font-size:16px;padding:4px 8px">
         <option>4</option><option>6</option><option>8</option><option>10</option><option selected>12</option>
       </select>명</label>
+    <select id="kind" class="field" style="width:auto;font-size:16px;padding:4px 8px">
+      <option value="all">전체</option><option value="m">남자판</option><option value="f">여자판</option>
+    </select>
     <button class="btn blue" id="random">🎲 랜덤 팀</button>
     <button class="btn" id="start">시작 ▶</button>
     <button class="btn gray small" id="back">반 바꾸기</button>

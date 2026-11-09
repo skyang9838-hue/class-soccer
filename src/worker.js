@@ -15,6 +15,7 @@ import {
   markPlayed,
   canStart,
   cleanName,
+  cycleGender,
 } from './room.js';
 
 const CLASS_NAME_MAX = 12;
@@ -177,7 +178,7 @@ export class ClassRoom extends DurableObject {
 
     // 아이
     const name = cleanName(url.searchParams.get('name'));
-    const res = join(this.roster, name);
+    const res = join(this.roster, name, url.searchParams.get('g'));
     if (!res.ok) {
       return fail(res.reason === 'taken' ? '같은 이름이 벌써 있어요. 다른 이름으로 들어와 주세요' : '이름을 적어 주세요');
     }
@@ -237,7 +238,12 @@ export class ClassRoom extends DurableObject {
     switch (msg.t) {
       case 'random':
         if (this.view === 'match') return;
-        randomTeams(this.roster, clampInt(msg.max, 2, 30, 12));
+        randomTeams(this.roster, clampInt(msg.max, 2, 30, 12), Math.random, ['m', 'f'].includes(msg.kind) ? msg.kind : 'all');
+        this.broadcastLobby();
+        break;
+      case 'gender':
+        if (this.view === 'match') return;
+        cycleGender(this.roster, String(msg.name));
         this.broadcastLobby();
         break;
       case 'cycle':
@@ -406,6 +412,7 @@ export class ClassRoom extends DurableObject {
       name: k.name,
       on: k.connected,
       team: k.team,
+      g: k.g,
     }));
     return { t: 'lobby', kids, view: this.view };
   }

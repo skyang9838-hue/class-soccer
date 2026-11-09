@@ -4,7 +4,7 @@ export function esc(s) {
 
 export function renderLists(kids, red, blue, bench, me) {
   const li = (k) =>
-    `<li style="${k.on ? '' : 'opacity:.45'}">${k.name === me ? '▶ ' : ''}${esc(k.name)}${k.on ? '' : ' (나감)'}</li>`;
+    `<li style="${k.on ? '' : 'opacity:.45'}">${k.name === me ? '▶ ' : ''}${k.g === 'm' ? '♂ ' : k.g === 'f' ? '♀ ' : ''}${esc(k.name)}${k.on ? '' : ' (나감)'}</li>`;
   red.innerHTML = kids.filter((k) => k.team === 'red').map(li).join('') || '<li>-</li>';
   blue.innerHTML = kids.filter((k) => k.team === 'blue').map(li).join('') || '<li>-</li>';
   bench.innerHTML = kids.filter((k) => !k.team).map(li).join('') || '<li>-</li>';

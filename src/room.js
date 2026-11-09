@@ -15,17 +15,23 @@ export function createRoster() {
   return { kids: new Map(), round: 0 };
 }
 
+export function cleanGender(g) {
+  return g === 'm' || g === 'f' ? g : null;
+}
+
 // 들어오기. 돌려주는 값: { ok, kid } 또는 { ok:false, reason }
-export function join(roster, rawName) {
+// gender: 'm'(남) | 'f'(여) | null
+export function join(roster, rawName, gender = null) {
   const name = cleanName(rawName);
   if (!name) return { ok: false, reason: 'empty' };
   const kid = roster.kids.get(name);
   if (kid) {
     if (kid.connected) return { ok: false, reason: 'taken' };
     kid.connected = true; // 다시 들어옴 → 원래 자리
+    if (cleanGender(gender)) kid.g = cleanGender(gender);
     return { ok: true, kid, rejoined: true };
   }
-  const fresh = { name, connected: true, team: null, lastPlayed: -1 };
+  const fresh = { name, connected: true, team: null, lastPlayed: -1, g: cleanGender(gender) };
   roster.kids.set(name, fresh);
   return { ok: true, kid: fresh, rejoined: false };
 }
@@ -40,8 +46,9 @@ export function kick(roster, name) {
 }
 
 // 랜덤 팀 짜기: 지난 판에 안 뛴 아이 먼저. 같은 순위끼리는 섞는다.
-export function randomTeams(roster, max = MAX_ON_FIELD, rnd = Math.random) {
-  const present = [...roster.kids.values()].filter((k) => k.connected);
+// kind: 'all' | 'm'(남자판) | 'f'(여자판) — 그 성별 아이만 뛴다
+export function randomTeams(roster, max = MAX_ON_FIELD, rnd = Math.random, kind = 'all') {
+  const present = [...roster.kids.values()].filter((k) => k.connected && (kind === 'all' || k.g === kind));
   for (const k of roster.kids.values()) k.team = null;
   const shuffled = present
     .map((k) => ({ k, r: rnd() }))
@@ -65,6 +72,13 @@ export function cycleTeam(roster, name, max = MAX_ON_FIELD) {
   if (kid.team === 'red') kid.team = 'blue';
   else if (kid.team === 'blue') kid.team = null;
   else if (onField < max) kid.team = 'red';
+}
+
+// 선생님이 성별 고치기: 남 → 여 → 모름 → 남
+export function cycleGender(roster, name) {
+  const kid = roster.kids.get(name);
+  if (!kid) return;
+  kid.g = kid.g === 'm' ? 'f' : kid.g === 'f' ? null : 'm';
 }
 
 export function teamsOf(roster) {

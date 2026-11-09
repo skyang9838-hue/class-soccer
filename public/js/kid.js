@@ -26,6 +26,17 @@ try {
 const params = new URLSearchParams(location.search);
 $('code').value = params.get('code') || saved.code || '';
 $('name').value = saved.name || '';
+let gender = saved.g || null;
+function paintGender() {
+  document.querySelectorAll('#gender [data-g]').forEach((b) => b.classList.toggle('on', b.dataset.g === gender));
+}
+document.querySelectorAll('#gender [data-g]').forEach((b) => {
+  b.onclick = () => {
+    gender = b.dataset.g;
+    paintGender();
+  };
+});
+paintGender();
 
 $('mute').textContent = isMuted() ? '🔇' : '🔊';
 $('mute').onclick = () => {
@@ -41,7 +52,8 @@ $('joinForm').onsubmit = (e) => {
   const name = $('name').value.trim();
   if (!/^\d{4}$/.test(code)) return ($('joinErr').textContent = '방 코드는 숫자 4자리예요');
   if (!name) return ($('joinErr').textContent = '이름을 적어 주세요');
-  saved = { code, name };
+  if (!gender) return ($('joinErr').textContent = '남·여를 골라 주세요');
+  saved = { code, name, g: gender };
   try {
     localStorage.setItem('cs-kid', JSON.stringify(saved));
   } catch {}
@@ -55,7 +67,7 @@ $('joinForm').onsubmit = (e) => {
 function connect() {
   clearTimeout(retryTimer);
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const url = `${proto}://${location.host}/ws/play?code=${encodeURIComponent(saved.code)}&name=${encodeURIComponent(saved.name)}`;
+  const url = `${proto}://${location.host}/ws/play?code=${encodeURIComponent(saved.code)}&name=${encodeURIComponent(saved.name)}&g=${saved.g || ''}`;
   const sock = new WebSocket(url);
   ws = sock;
   let fatal = false;

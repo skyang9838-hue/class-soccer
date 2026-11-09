@@ -149,3 +149,11 @@ canvas.tags { pointer-events: none; }
 .solo-h { color: var(--dim); font-size: 14px; }
 .solo-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 .solo-row .field { font-size: 16px; padding: 6px 8px; }
+
+.gender { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gender .btn.on[data-g="m"] { background: var(--blue); outline: 3px solid var(--gold); }
+.gender .btn.on[data-g="f"] { background: #e05a9c; outline: 3px solid var(--gold); }
+.chip .g { padding: 6px 2px 6px 8px; font-size: 14px; }
+.chip .g.m { color: #8ab8ff; }
+.chip .g.f { color: #ff9ccc; }
+.chip .g.none { color: #94b0c2; }

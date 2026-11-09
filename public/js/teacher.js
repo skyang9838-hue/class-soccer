@@ -159,6 +159,7 @@ function leaveMatch() {
 function renderLobby() {
   const chip = (k) => `
     <span class="chip ${k.team || ''} ${k.on ? '' : 'off'}">
+      <button class="g ${k.g || 'none'}" data-gender="${esc(k.name)}" title="성별 고치기">${k.g === 'm' ? '♂' : k.g === 'f' ? '♀' : '?'}</button>
       <button data-cycle="${esc(k.name)}" title="팀 바꾸기">${esc(k.name)}${k.on ? '' : ' (나감)'}</button>
       <button class="x" data-kick="${esc(k.name)}" title="내보내기">✕</button>
     </span>`;
@@ -179,6 +180,13 @@ function renderLobby() {
       send({ t: 'cycle', name: b.dataset.cycle, max: Number($('max').value) });
     };
   });
+  document.querySelectorAll('[data-gender]').forEach((b) => {
+    b.onclick = () => send({ t: 'gender', name: b.dataset.gender });
+  });
+  const nm = kids.filter((k) => k.on && k.g === 'm').length;
+  const nf = kids.filter((k) => k.on && k.g === 'f').length;
+  $('kind').options[1].textContent = `남자판 (${nm})`;
+  $('kind').options[2].textContent = `여자판 (${nf})`;
   document.querySelectorAll('[data-kick]').forEach((b) => {
     b.onclick = () => {
       if (b.dataset.armed) {
@@ -199,7 +207,7 @@ function renderLobby() {
 $('random').onclick = () => {
   unlock();
   play('click');
-  send({ t: 'random', max: Number($('max').value) });
+  send({ t: 'random', max: Number($('max').value), kind: $('kind').value });
 };
 $('start').onclick = () => {
   unlock();
