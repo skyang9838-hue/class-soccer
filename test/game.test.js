@@ -11,7 +11,7 @@ import {
   GOAL_PAUSE,
   TICK,
   formation,
-} from '../src/game.js';
+} from '../public/js/game.js';
 
 const roster = [
   { id: 1, name: '가', team: 'red' },
@@ -186,5 +186,58 @@ describe('경기 계산', () => {
       expect(p.x).toBeGreaterThan(FIELD.left);
       expect(p.x).toBeLessThan(FIELD.right);
     }
+  });
+
+  it('공에 닿으면 발 앞에 붙어 같이 간다 (드리블), 공을 가지면 조금 느리다', () => {
+    const m = playing();
+    const [a, b] = m.players;
+    b.x = 280;
+    b.y = 130;
+    a.x = 100;
+    a.y = 60;
+    m.ball.x = 106;
+    m.ball.y = 60;
+    m.ball.vx = m.ball.vy = 0;
+    setInput(m, 1, { dx: 1, dy: 0 });
+    step(m);
+    expect(m.ball.owner).toBe(1);
+    const x0 = a.x;
+    run(m, 1);
+    expect(m.ball.owner).toBe(1);
+    expect(m.ball.x).toBeGreaterThan(a.x);
+    const carried = a.x - x0;
+    expect(carried).toBeGreaterThan(45);
+    expect(carried).toBeLessThan(60); // 보통 속도(62)보다 느림
+  });
+
+  it('공 없이 패스 키 = 태클: 상대 공을 뺏고 상대는 잠깐 어지럽다', () => {
+    const m = playing();
+    const [a, b] = m.players;
+    m.ball.owner = 2;
+    m.ball.safe = 0;
+    b.x = 120;
+    b.y = 60;
+    b.fx = -1;
+    b.fy = 0;
+    a.x = 100;
+    a.y = 60;
+    a.fx = 1;
+    a.fy = 0;
+    setInput(m, 1, { pass: true });
+    let stole = false;
+    for (let i = 0; i < 10; i++) {
+      step(m);
+      if (m.events.some((e) => e.e === 'steal')) stole = true;
+    }
+    expect(stole).toBe(true);
+    expect(m.ball.owner).toBe(1);
+    expect(b.stun).toBeGreaterThan(0);
+  });
+
+  it('패스·슛만 눌러도 움직이던 방향은 그대로', () => {
+    const m = playing();
+    setInput(m, 1, { dx: 1, dy: 0 });
+    setInput(m, 1, { shoot: true });
+    expect(m.players[0].input.dx).toBe(1);
   });
 });

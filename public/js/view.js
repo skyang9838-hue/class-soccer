@@ -14,7 +14,7 @@ export function createView(root) {
         <div class="clock"><b data-t>3:00</b><span data-dbl class="dbl hidden">⚡ 한 골 2점</span></div>
         <div class="score blue"><b data-b>0</b><span class="tname">파랑</span></div>
       </div>
-      <div class="keyhint" data-keys>← ↑ → ↓ 움직이기 · Z 패스 · X 슛</div>
+      <div class="keyhint" data-keys>← ↑ → ↓ 움직이기 · Z 패스 (공 없으면 태클) · X 슛</div>
       <div class="banner hidden" data-banner></div>
       <div class="ribbon hidden" data-ribbon></div>
     </div>`;
@@ -168,6 +168,9 @@ export function createView(root) {
         face: q2[3] || (info.team === 'red' ? 1 : -1),
         moving: q2[4] && !paused,
         kicking: q2[5],
+        tackling: q2[6],
+        stunned: q2[7],
+        hasBall: q2[8],
         team: info.team,
         hair: info.hair,
         name: info.name,
@@ -201,6 +204,15 @@ export function createView(root) {
       tg.fillRect(x - w / 2, y - fs - 2, w, fs + 4);
       tg.fillStyle = mine ? '#1a1c2c' : '#fff';
       tg.fillText(p.name, x, y + 1);
+      if (p.stunned) {
+        // 어지러움: 머리 위에서 도는 별
+        tg.font = `${fs}px sans-serif`;
+        for (let k = 0; k < 3; k++) {
+          const a = t * 8 + (k * Math.PI * 2) / 3;
+          tg.fillText('⭐', x + Math.cos(a) * fs * 0.9, y - fs - 2 + Math.sin(a) * fs * 0.35);
+        }
+        tg.font = `${fs}px Galmuri11, Galmuri9, sans-serif`;
+      }
       if (mine) {
         const bob = Math.sin(t * 6) * scale * 0.6;
         const ty = y - fs - 6 + bob;

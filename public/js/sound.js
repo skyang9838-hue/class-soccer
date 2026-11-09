@@ -78,6 +78,13 @@ export function play(name, arg) {
       noise(t, 0.05, 0.18);
       tone(320, t, 0.05, 'triangle', 0.15, 160);
       break;
+    case 'tackle':
+      noise(t, 0.18, 0.12);
+      tone(500, t, 0.15, 'triangle', 0.08, 200);
+      break;
+    case 'steal':
+      [880, 660, 440].forEach((f, i) => tone(f, t + i * 0.05, 0.06, 'square', 0.08));
+      break;
     case 'wall':
       tone(140, t, 0.05, 'square', 0.05);
       break;

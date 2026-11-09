@@ -24,6 +24,15 @@
       <button class="btn" type="submit">들어가기 ▶</button>
       <div class="err" id="joinErr"></div>
     </form>
+    <div class="solo">
+      <div class="solo-h">🤖 혼자 연습 (AI랑)</div>
+      <div class="solo-row">
+        <select class="field" id="soloN"><option value="1">1대1</option><option value="2">2대2</option><option value="3" selected>3대3</option><option value="4">4대4</option><option value="5">5대5</option><option value="6">6대6</option></select>
+        <select class="field" id="soloL"><option value="easy">쉬움</option><option value="normal" selected>보통</option><option value="hard">어려움</option></select>
+        <select class="field" id="soloT"><option value="60">1분</option><option value="180" selected>3분</option></select>
+      </div>
+      <button class="btn blue" id="soloGo" type="button">혼자 연습 시작 ▶</button>
+    </div>
   </div>
 </section>
 
@@ -38,7 +47,7 @@
       <div class="blue"><h4>파랑</h4><ul id="lBlue"></ul></div>
       <div><h4>관전</h4><ul id="lBench"></ul></div>
     </div>
-    <p class="sub" style="margin-top:16px">움직이기 ← ↑ → ↓ (WASD) · 패스 Z (J) · 슛 X (K)</p>
+    <p class="sub" style="margin-top:16px">움직이기 ← ↑ → ↓ (WASD) · 패스/태클 Z (J) · 슛 X (K)</p>
   </div>
 </section>
 
@@ -49,7 +58,12 @@
 
 <!-- 결과 -->
 <section class="screen grass-bg hidden" id="result">
-  <div class="box result" id="resultBox"></div>
+  <div class="box result"><div id="resultBox"></div>
+    <div class="hidden" id="soloAgain" style="text-align:center;margin-top:14px">
+      <button class="btn blue" id="soloRetry">다시 하기 ▶</button>
+      <button class="btn gray" id="soloHome">처음으로</button>
+    </div>
+  </div>
 </section>
 
 <script type="module" src="js/kid.js"></script>

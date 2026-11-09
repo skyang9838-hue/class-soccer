@@ -35,6 +35,7 @@ const LEGS = {
   walkA: ['.k.....k..', 'kk.....kk.'],
   walkB: ['...k.k....', '...kkkk...'],
   kick: ['..k....kk.', '..k.....kk'],
+  slide: ['.......kkk', '..........'],
 };
 
 const cache = new Map();
@@ -178,10 +179,10 @@ function pixelCircle(g, cx, cy, r) {
 
 export function drawPlayer(g, p, t) {
   // p: { x, y, team, face, moving, kicking, hair }
-  const legs = p.kicking ? 'kick' : p.moving ? (Math.floor(t * 8 + p.id) % 2 ? 'walkA' : 'walkB') : 'idle';
+  const legs = p.tackling ? 'slide' : p.kicking ? 'kick' : p.moving ? (Math.floor(t * 8 + p.id) % 2 ? 'walkA' : 'walkB') : 'idle';
   const spr = makeSprite(p.team, p.hair, legs, p.face < 0);
   const x = Math.round(p.x - spr.width / 2);
-  const y = Math.round(p.y + 5 - spr.height);
+  const y = Math.round(p.y + 5 - spr.height) + (p.tackling ? 2 : 0);
   // 그림자
   g.fillStyle = 'rgba(0,0,0,0.25)';
   g.fillRect(Math.round(p.x) - 4, Math.round(p.y) + 4, 8, 2);

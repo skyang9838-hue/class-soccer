@@ -144,3 +144,8 @@ canvas.tags { pointer-events: none; }
 
 .corner { position: fixed; right: 10px; top: 8px; z-index: 5; display: flex; gap: 6px; }
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #000d; padding: 8px 16px; border: 3px solid var(--gold); z-index: 20; }
+
+.solo { margin-top: 18px; padding-top: 14px; border-top: 4px dashed var(--line); display: grid; gap: 10px; }
+.solo-h { color: var(--dim); font-size: 14px; }
+.solo-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.solo-row .field { font-size: 16px; padding: 6px 8px; }

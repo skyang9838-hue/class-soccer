@@ -3,7 +3,7 @@
 // Registry: 4자리 방 코드 → 반
 
 import { DurableObject } from 'cloudflare:workers';
-import { createMatch, step, setInput, snapshot, result, TICK } from './game.js';
+import { createMatch, step, setInput, snapshot, result, TICK } from '../public/js/game.js';
 import {
   createRoster,
   join,

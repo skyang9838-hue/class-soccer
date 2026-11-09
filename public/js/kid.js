@@ -1,6 +1,7 @@
 import { createView } from './view.js';
 import { unlock, toggleMute, isMuted, play, stopBgm } from './sound.js';
 import { renderResult, renderLists } from './common.js';
+import { startSolo } from './solo.js';
 
 const $ = (id) => document.getElementById(id);
 const screens = ['join', 'wait', 'game', 'result'];
@@ -15,6 +16,7 @@ let inMatch = false;
 let myId = null;
 let wantConnect = false;
 let retryTimer = null;
+let solo = null; // 혼자 연습 중이면 경기 조종기
 
 // 저장해 둔 코드·이름 (창을 닫았다 와도 바로)
 let saved = {};
@@ -44,6 +46,9 @@ $('joinForm').onsubmit = (e) => {
     localStorage.setItem('cs-kid', JSON.stringify(saved));
   } catch {}
   wantConnect = true;
+  if (solo) solo.stop();
+  solo = null;
+  $('soloAgain').classList.add('hidden');
   connect();
 };
 
@@ -131,6 +136,60 @@ function leaveMatch() {
   sendInput(true);
 }
 
+function sendKick(a) {
+  if (solo) solo.kick(a);
+  else if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'k', a }));
+}
+
+// ───── 혼자 연습
+function soloStart() {
+  unlock();
+  play('click');
+  const name = $('name').value.trim() || '나';
+  wantConnect = false;
+  if (ws) ws.close();
+  if (solo) solo.stop();
+  $('soloAgain').classList.remove('hidden');
+  solo = startSolo({
+    name,
+    perTeam: Number($('soloN').value),
+    level: $('soloL').value,
+    matchTime: Number($('soloT').value),
+    onMatch(roster, you) {
+      inMatch = true;
+      myId = you;
+      show('game');
+      view.start(roster, you);
+    },
+    onSnap(s) {
+      view.push(s);
+    },
+    onEnd(r) {
+      leaveMatch();
+      $('resultBox').innerHTML = renderResult(r, name).replace('선생님이 다음 판을 준비하고 있어요', '혼자 연습 끝!');
+      show('result');
+    },
+  });
+}
+$('soloGo').onclick = soloStart;
+$('soloRetry').onclick = soloStart;
+$('soloHome').onclick = () => {
+  solo && solo.stop();
+  solo = null;
+  $('soloAgain').classList.add('hidden');
+  show('join');
+};
+window.addEventListener('keydown', (e) => {
+  // 연습 중 Esc = 그만하고 처음으로
+  if (solo && inMatch && e.code === 'Escape') {
+    solo.stop();
+    solo = null;
+    leaveMatch();
+    $('soloAgain').classList.add('hidden');
+    show('join');
+  }
+});
+
 // ───── 키보드
 const held = new Set();
 const KEYS = {
@@ -147,7 +206,8 @@ function sendInput(force) {
   const key = dx + ',' + dy;
   if (!force && key === lastSent) return;
   lastSent = key;
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'i', dx, dy }));
+  if (solo) solo.input(dx, dy);
+  else if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'i', dx, dy }));
 }
 
 window.addEventListener('keydown', (e) => {
@@ -158,10 +218,10 @@ window.addEventListener('keydown', (e) => {
     sendInput();
   } else if (!e.repeat && (e.code === 'KeyZ' || e.code === 'KeyJ')) {
     e.preventDefault();
-    ws && ws.readyState === 1 && ws.send(JSON.stringify({ t: 'k', a: 'pass' }));
+    sendKick('pass');
   } else if (!e.repeat && (e.code === 'KeyX' || e.code === 'KeyK')) {
     e.preventDefault();
-    ws && ws.readyState === 1 && ws.send(JSON.stringify({ t: 'k', a: 'shoot' }));
+    sendKick('shoot');
   }
 });
 window.addEventListener('keyup', (e) => {

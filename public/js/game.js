@@ -1,5 +1,5 @@
 // 경기 계산 — 서버·화면과 떨어진 순수 코드. 단위는 도트 1칸(px).
-// 화면은 320×150 도트를 정수배로 키워 그린다.
+// 화면은 320×150 도트를 정수배로 키워 그린다. 서버(src/worker.js)와 혼자 연습(solo.js)이 같이 쓴다.
 
 export const W = 320;
 export const H = 150;
@@ -18,6 +18,7 @@ export const GOAL_PAUSE = 2.2;
 const PLAYER_R = 4;
 const BALL_R = 2.5;
 const PLAYER_SPEED = 62;
+const DRIBBLE_SPEED = 54; // 공을 가지면 조금 느리다
 const BALL_DECAY = 1.1; // 초당 감속 (지수)
 const BALL_MAX = 240;
 const SHOOT_SPEED = 220;
@@ -26,6 +27,16 @@ const PASS_MAX = 150;
 const KICK_RANGE = PLAYER_R + BALL_R + 4;
 const KICK_COOLDOWN = 0.3;
 const WALL_BOUNCE = 0.8;
+const CATCH_SPEED = 130; // 이보다 빠른 공은 몸에 맞고 튕긴다
+const CARRY_GAP = PLAYER_R + BALL_R + 1; // 드리블할 때 공이 발 앞 이만큼
+const NO_CATCH_AFTER_KICK = 0.25;
+// 태클
+const TACKLE_TIME = 0.24;
+const TACKLE_SPEED = 130;
+const TACKLE_COOL = 0.9;
+const TACKLE_REACH = PLAYER_R + BALL_R + 4;
+const STUN_TIME = 0.7;
+const STEAL_SAFE = 0.35; // 막 빼앗은 아이는 잠깐 안 빼앗긴다
 
 // team: 'red'은 왼쪽 골을 지키고 오른쪽으로 공격, 'blue'는 반대.
 
@@ -37,7 +48,7 @@ export function createMatch(roster, opts = {}) {
     phaseTime: KICKOFF_FREEZE,
     score: { red: 0, blue: 0 },
     goals: [], // { id, name, team, points, own }
-    ball: { x: CX, y: CY, vx: 0, vy: 0, lastTouch: null, prevTouch: null },
+    ball: { x: CX, y: CY, vx: 0, vy: 0, owner: null, safe: 0, lastTouch: null, prevTouch: null },
     players: roster.map((r) => ({
       id: r.id,
       name: r.name,
@@ -50,6 +61,10 @@ export function createMatch(roster, opts = {}) {
       fy: 0,
       cool: 0,
       kickAnim: 0,
+      noCatch: 0,
+      tackleT: 0,
+      tackleCool: 0,
+      stun: 0,
       input: { dx: 0, dy: 0, pass: false, shoot: false },
     })),
     events: [],
@@ -66,12 +81,14 @@ export function isDouble(m) {
 }
 
 function placeKickoff(m, team) {
-  m.ball.x = CX;
-  m.ball.y = CY;
-  m.ball.vx = 0;
-  m.ball.vy = 0;
-  m.ball.lastTouch = null;
-  m.ball.prevTouch = null;
+  const b = m.ball;
+  b.x = CX;
+  b.y = CY;
+  b.vx = b.vy = 0;
+  b.owner = null;
+  b.safe = 0;
+  b.lastTouch = null;
+  b.prevTouch = null;
   for (const side of ['red', 'blue']) {
     const list = m.players.filter((p) => p.team === side);
     const dir = side === 'red' ? -1 : 1; // 자기 진영 쪽
@@ -83,13 +100,13 @@ function placeKickoff(m, team) {
       p.vx = p.vy = 0;
       p.fx = -dir;
       p.fy = 0;
-      p.cool = 0;
-      p.kickAnim = 0;
+      p.cool = p.kickAnim = p.noCatch = p.tackleT = p.tackleCool = p.stun = 0;
     });
-    // 공을 잡는 팀은 한 명이 공 바로 옆에 선다
+    // 공을 잡는 팀은 맨 앞 한 명이 공 바로 옆에 선다 (맨 뒤 가운데 자리는 비우지 않는다)
     if (side === team && list.length) {
-      list[0].x = CX + dir * (PLAYER_R + BALL_R + 2);
-      list[0].y = CY;
+      const k = list[list.length - 1];
+      k.x = CX + dir * (PLAYER_R + BALL_R + 2);
+      k.y = CY;
     }
   }
 }
@@ -100,12 +117,16 @@ export function formation(n) {
   if (n === 0) return out;
   const halfW = CX - FIELD.left;
   const usableH = FIELD.bottom - FIELD.top - 24;
-  const cols = Math.ceil(Math.sqrt(n));
+  // 맨 뒤 가운데에 한 명 (골키퍼는 없지만 가운데가 비지 않게), 나머지는 앞쪽에 고르게
+  out.push({ x: halfW - 26, y: 0 });
+  const rest = n - 1;
+  if (rest === 0) return out;
+  const cols = Math.ceil(Math.sqrt(rest));
   let idx = 0;
-  for (let c = 0; c < cols && idx < n; c++) {
+  for (let c = 0; c < cols && idx < rest; c++) {
     const remainingCols = cols - c;
-    const inCol = Math.ceil((n - idx) / remainingCols);
-    const x = 18 + ((c + 0.5) / cols) * (halfW - 36);
+    const inCol = Math.ceil((rest - idx) / remainingCols);
+    const x = 18 + ((c + 0.5) / cols) * (halfW - 64);
     for (let r = 0; r < inCol; r++) {
       const y = inCol === 1 ? 0 : -usableH / 2 + (r / (inCol - 1)) * usableH;
       out.push({ x, y });
@@ -115,11 +136,12 @@ export function formation(n) {
   return out;
 }
 
+// 방향(dx·dy)은 들어왔을 때만 바꾼다. 패스·슛만 눌러도 움직임은 그대로.
 export function setInput(m, id, input) {
   const p = m.players.find((q) => q.id === id);
   if (!p) return;
-  p.input.dx = clampUnit(input.dx);
-  p.input.dy = clampUnit(input.dy);
+  if ('dx' in input) p.input.dx = clampUnit(input.dx);
+  if ('dy' in input) p.input.dy = clampUnit(input.dy);
   if (input.pass) p.input.pass = true;
   if (input.shoot) p.input.shoot = true;
 }
@@ -164,12 +186,20 @@ export function step(m, dt = TICK) {
     m.doubleAnnounced = true;
     m.events.push({ e: 'double' });
   }
+  if (m.ball.safe > 0) m.ball.safe -= dt;
 
   movePlayers(m, dt);
-  kicks(m);
-  dribble(m);
   separatePlayers(m);
-  const goalTeam = moveBall(m, dt, false);
+  actions(m);
+  tackles(m);
+  let goalTeam;
+  if (m.ball.owner != null) {
+    carry(m);
+    goalTeam = checkBounds(m, false);
+  } else {
+    goalTeam = moveBall(m, dt, false);
+    if (!goalTeam) catchBall(m);
+  }
   if (goalTeam) {
     scoreGoal(m, goalTeam);
     return m;
@@ -180,107 +210,202 @@ export function step(m, dt = TICK) {
 
 function finish(m) {
   m.phase = 'end';
+  m.ball.owner = null;
   m.events.push({ e: 'end' });
   return m;
 }
 
+function byId(m, id) {
+  return m.players.find((p) => p.id === id);
+}
+
 function movePlayers(m, dt) {
   for (const p of m.players) {
-    let { dx, dy } = p.input;
-    const len = Math.hypot(dx, dy);
-    if (len > 0) {
-      dx /= len;
-      dy /= len;
-      p.fx = dx;
-      p.fy = dy;
+    if (p.cool > 0) p.cool -= dt;
+    if (p.kickAnim > 0) p.kickAnim -= dt;
+    if (p.noCatch > 0) p.noCatch -= dt;
+    if (p.tackleCool > 0) p.tackleCool -= dt;
+    if (p.stun > 0) {
+      p.stun -= dt;
+      p.vx = p.vy = 0;
+      continue;
     }
-    p.vx = dx * PLAYER_SPEED;
-    p.vy = dy * PLAYER_SPEED;
+    if (p.tackleT > 0) {
+      // 미끄러지는 중: 키와 상관없이 보는 방향으로
+      p.tackleT -= dt;
+      p.vx = p.fx * TACKLE_SPEED;
+      p.vy = p.fy * TACKLE_SPEED;
+    } else {
+      let { dx, dy } = p.input;
+      const len = Math.hypot(dx, dy);
+      if (len > 0) {
+        dx /= len;
+        dy /= len;
+        p.fx = dx;
+        p.fy = dy;
+      }
+      const sp = m.ball.owner === p.id ? DRIBBLE_SPEED : PLAYER_SPEED;
+      p.vx = dx * sp;
+      p.vy = dy * sp;
+    }
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.x = clamp(p.x, FIELD.left + PLAYER_R, FIELD.right - PLAYER_R);
     p.y = clamp(p.y, FIELD.top + PLAYER_R, FIELD.bottom - PLAYER_R);
-    if (p.cool > 0) p.cool -= dt;
-    if (p.kickAnim > 0) p.kickAnim -= dt;
   }
 }
 
-function kicks(m) {
+// 패스·슛·태클 키
+function actions(m) {
   const b = m.ball;
   for (const p of m.players) {
     const wantShoot = p.input.shoot;
     const wantPass = p.input.pass;
     p.input.shoot = p.input.pass = false;
     if (!wantShoot && !wantPass) continue;
-    if (p.cool > 0) continue;
-    p.kickAnim = 0.2;
+    if (p.stun > 0 || p.tackleT > 0) continue;
+    const mine = b.owner === p.id;
     const d = Math.hypot(b.x - p.x, b.y - p.y);
-    if (d > KICK_RANGE) continue;
-    p.cool = KICK_COOLDOWN;
-    if (wantShoot) {
-      b.vx = p.fx * SHOOT_SPEED;
-      b.vy = p.fy * SHOOT_SPEED;
-      m.events.push({ e: 'shoot' });
-    } else {
-      const mate = nearestMate(m, p);
-      if (mate) {
-        const tx = mate.x - b.x;
-        const ty = mate.y - b.y;
-        const td = Math.hypot(tx, ty) || 1;
-        const sp = clamp(PASS_MIN + td * 0.9, PASS_MIN, PASS_MAX);
-        b.vx = (tx / td) * sp;
-        b.vy = (ty / td) * sp;
-      } else {
-        b.vx = p.fx * PASS_MIN * 1.4;
-        b.vy = p.fy * PASS_MIN * 1.4;
-      }
-      m.events.push({ e: 'pass' });
+    const canKick = p.cool <= 0 && (mine || (b.owner == null && d <= KICK_RANGE));
+    if (canKick) {
+      kick(m, p, wantShoot);
+      continue;
     }
-    touch(b, p);
+    // 공이 없을 때 패스 키 = 태클
+    if (wantPass && !mine && p.tackleCool <= 0) {
+      p.tackleT = TACKLE_TIME;
+      p.tackleCool = TACKLE_COOL;
+      p.kickAnim = TACKLE_TIME;
+      m.events.push({ e: 'tackle' });
+    }
   }
 }
 
-function nearestMate(m, p) {
+function kick(m, p, shoot) {
+  const b = m.ball;
+  p.cool = KICK_COOLDOWN;
+  p.kickAnim = 0.2;
+  p.noCatch = NO_CATCH_AFTER_KICK;
+  b.owner = null;
+  // 공을 발 앞에 두고 찬다
+  b.x = p.x + p.fx * CARRY_GAP;
+  b.y = p.y + p.fy * CARRY_GAP;
+  if (shoot) {
+    b.vx = p.fx * SHOOT_SPEED;
+    b.vy = p.fy * SHOOT_SPEED;
+    m.events.push({ e: 'shoot' });
+  } else {
+    const mate = passTarget(m, p);
+    if (mate) {
+      const tx = mate.x - b.x;
+      const ty = mate.y - b.y;
+      const td = Math.hypot(tx, ty) || 1;
+      const sp = clamp(PASS_MIN + td * 0.9, PASS_MIN, PASS_MAX);
+      b.vx = (tx / td) * sp;
+      b.vy = (ty / td) * sp;
+    } else {
+      b.vx = p.fx * PASS_MIN * 1.4;
+      b.vy = p.fy * PASS_MIN * 1.4;
+    }
+    m.events.push({ e: 'pass' });
+  }
+  touch(b, p);
+}
+
+// 패스는 보는 쪽에 있는 우리 팀 중 가까운 아이에게 (없으면 그냥 가까운 아이)
+function passTarget(m, p) {
   let best = null;
-  let bestD = Infinity;
+  let bestScore = Infinity;
   for (const q of m.players) {
     if (q === p || q.team !== p.team) continue;
-    const d = Math.hypot(q.x - p.x, q.y - p.y);
-    if (d < bestD) {
-      bestD = d;
+    const dx = q.x - p.x;
+    const dy = q.y - p.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const facing = (dx * p.fx + dy * p.fy) / d; // -1~1
+    const score = d * (1.6 - facing);
+    if (score < bestScore) {
+      bestScore = score;
       best = q;
     }
   }
   return best;
 }
 
-function touch(b, p) {
-  if (b.lastTouch !== p.id) b.prevTouch = b.lastTouch;
-  b.lastTouch = p.id;
+function tackles(m) {
+  const b = m.ball;
+  for (const t of m.players) {
+    if (t.tackleT <= 0) continue;
+    const d = Math.hypot(b.x - t.x, b.y - t.y);
+    if (d > TACKLE_REACH) continue;
+    const owner = b.owner != null ? byId(m, b.owner) : null;
+    if (owner === t) continue;
+    if (owner && owner.team === t.team) continue; // 우리 팀 공은 안 뺏는다
+    if (owner && b.safe > 0) continue;
+    if (owner) {
+      owner.stun = STUN_TIME;
+      owner.noCatch = STUN_TIME;
+      m.events.push({ e: 'steal' });
+    }
+    t.tackleT = 0;
+    take(m, t);
+  }
 }
 
-// 공에 닿으면 몸으로 민다 (드리블)
-function dribble(m) {
+function take(m, p) {
   const b = m.ball;
+  b.owner = p.id;
+  b.safe = STEAL_SAFE;
+  b.vx = b.vy = 0;
+  touch(b, p);
+}
+
+// 굴러가는 공에 닿으면 발 앞에 붙는다 (빠른 공은 몸에 맞고 튕긴다)
+function catchBall(m) {
+  const b = m.ball;
+  const speed = Math.hypot(b.vx, b.vy);
+  let best = null;
+  let bestD = Infinity;
   for (const p of m.players) {
-    const dx = b.x - p.x;
-    const dy = b.y - p.y;
-    const d = Math.hypot(dx, dy);
-    const min = PLAYER_R + BALL_R;
-    if (d >= min) continue;
-    const nx = d > 0.001 ? dx / d : p.fx;
-    const ny = d > 0.001 ? dy / d : p.fy;
-    b.x = p.x + nx * min;
-    b.y = p.y + ny * min;
-    // 선수 속도만큼 공이 앞으로 굴러간다
-    const pushed = Math.max(0, p.vx * nx + p.vy * ny) * 1.15 + 12;
-    const along = b.vx * nx + b.vy * ny;
-    if (along < pushed) {
-      b.vx += (pushed - along) * nx;
-      b.vy += (pushed - along) * ny;
+    if (p.stun > 0 || p.noCatch > 0) continue;
+    const d = Math.hypot(b.x - p.x, b.y - p.y);
+    if (d < PLAYER_R + BALL_R + 1 && d < bestD) {
+      bestD = d;
+      best = p;
     }
-    touch(b, p);
   }
+  if (!best) return;
+  if (speed <= CATCH_SPEED) {
+    take(m, best);
+    return;
+  }
+  // 튕김
+  const dx = b.x - best.x;
+  const dy = b.y - best.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const nx = dx / d;
+  const ny = dy / d;
+  const along = b.vx * nx + b.vy * ny;
+  if (along < 0) {
+    b.vx -= 1.6 * along * nx;
+    b.vy -= 1.6 * along * ny;
+  }
+  b.x = best.x + nx * (PLAYER_R + BALL_R + 0.5);
+  b.y = best.y + ny * (PLAYER_R + BALL_R + 0.5);
+  touch(b, best);
+}
+
+// 드리블: 공이 가진 아이의 발 앞을 따라다닌다
+function carry(m) {
+  const b = m.ball;
+  const p = byId(m, b.owner);
+  if (!p || p.stun > 0) {
+    b.owner = null;
+    return;
+  }
+  b.x = p.x + p.fx * CARRY_GAP;
+  b.y = p.y + p.fy * CARRY_GAP;
+  b.vx = p.vx;
+  b.vy = p.vy;
 }
 
 function separatePlayers(m) {
@@ -308,7 +433,7 @@ function separatePlayers(m) {
   }
 }
 
-// 공 움직임. 골이면 골 먹은 쪽이 아니라 '넣은 팀'을 돌려준다.
+// 굴러가는 공. 골이면 '넣은 팀'을 돌려준다.
 function moveBall(m, dt, frozen) {
   const b = m.ball;
   const sp = Math.hypot(b.vx, b.vy);
@@ -322,65 +447,75 @@ function moveBall(m, dt, frozen) {
   if (Math.abs(b.vx) < 1 && Math.abs(b.vy) < 1) b.vx = b.vy = 0;
   b.x += b.vx * dt;
   b.y += b.vy * dt;
+  return checkBounds(m, frozen);
+}
 
+// 벽에 튕기기·골 판정 (드리블 중인 공도 여기서 골이 된다)
+function checkBounds(m, frozen) {
+  const b = m.ball;
+  const carried = b.owner != null;
   const inMouth = Math.abs(b.y - CY) < GOAL_HALF - BALL_R;
 
-  // 위아래 벽
   if (b.y < FIELD.top + BALL_R) {
     b.y = FIELD.top + BALL_R;
     b.vy = Math.abs(b.vy) * WALL_BOUNCE;
-    if (!frozen) m.events.push({ e: 'wall' });
+    if (!frozen && !carried) m.events.push({ e: 'wall' });
   } else if (b.y > FIELD.bottom - BALL_R) {
     b.y = FIELD.bottom - BALL_R;
     b.vy = -Math.abs(b.vy) * WALL_BOUNCE;
-    if (!frozen) m.events.push({ e: 'wall' });
+    if (!frozen && !carried) m.events.push({ e: 'wall' });
   }
 
-  // 왼쪽
   if (b.x < FIELD.left + BALL_R) {
     if (inMouth || frozen) {
       if (b.x < FIELD.left - GOAL_DEPTH + BALL_R) {
         b.x = FIELD.left - GOAL_DEPTH + BALL_R;
         b.vx = Math.abs(b.vx) * 0.3;
       }
-      if (!frozen && b.x < FIELD.left - BALL_R) return 'blue';
+      if (!frozen && b.x < FIELD.left - BALL_R + (carried ? 3 : 0)) return 'blue';
     } else {
       b.x = FIELD.left + BALL_R;
       b.vx = Math.abs(b.vx) * WALL_BOUNCE;
-      m.events.push({ e: 'wall' });
+      if (!carried) m.events.push({ e: 'wall' });
     }
   }
-  // 오른쪽
   if (b.x > FIELD.right - BALL_R) {
     if (inMouth || frozen) {
       if (b.x > FIELD.right + GOAL_DEPTH - BALL_R) {
         b.x = FIELD.right + GOAL_DEPTH - BALL_R;
         b.vx = -Math.abs(b.vx) * 0.3;
       }
-      if (!frozen && b.x > FIELD.right + BALL_R) return 'red';
+      if (!frozen && b.x > FIELD.right + BALL_R - (carried ? 3 : 0)) return 'red';
     } else {
       b.x = FIELD.right - BALL_R;
       b.vx = -Math.abs(b.vx) * WALL_BOUNCE;
-      m.events.push({ e: 'wall' });
+      if (!carried) m.events.push({ e: 'wall' });
     }
   }
-  // 골망 안에서 위아래로 못 나가게
   if (b.x < FIELD.left || b.x > FIELD.right) {
     b.y = clamp(b.y, CY - GOAL_HALF + BALL_R, CY + GOAL_HALF - BALL_R);
   }
   return null;
 }
 
+function touch(b, p) {
+  if (b.lastTouch !== p.id) b.prevTouch = b.lastTouch;
+  b.lastTouch = p.id;
+}
+
 function scoreGoal(m, team) {
   const points = isDouble(m) ? 2 : 1;
   m.score[team] += points;
   const b = m.ball;
-  const byId = (id) => m.players.find((p) => p.id === id);
-  let scorer = byId(b.lastTouch);
+  b.owner = null;
+  // 골망 안으로 살짝 굴러 들어가게
+  b.vx = team === 'red' ? 60 : -60;
+  b.vy = 0;
+  let scorer = byId(m, b.lastTouch);
   let own = false;
   if (scorer && scorer.team !== team) {
     // 자책골이면 그 전에 찬 같은 팀 아이에게, 없으면 자책골로
-    const prev = byId(b.prevTouch);
+    const prev = byId(m, b.prevTouch);
     if (prev && prev.team === team) scorer = prev;
     else own = true;
   }
@@ -403,6 +538,7 @@ export function result(m) {
 }
 
 // 화면으로 보낼 작은 상태
+// p: [id, x, y, 보는 방향(±1), 움직임, 차기, 태클, 어지러움, 공 가짐]
 export function snapshot(m) {
   return {
     ph: m.phase,
@@ -417,6 +553,9 @@ export function snapshot(m) {
       Math.sign(Math.round(p.fx * 10)) || 0,
       p.vx !== 0 || p.vy !== 0 ? 1 : 0,
       p.kickAnim > 0 ? 1 : 0,
+      p.tackleT > 0 ? 1 : 0,
+      p.stun > 0 ? 1 : 0,
+      m.ball.owner === p.id ? 1 : 0,
     ]),
     ev: m.events,
   };
