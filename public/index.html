@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>교실 축구</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.39.9/dist/galmuri.css">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ctext y=%2214%22 font-size=%2214%22%3E%E2%9A%BD%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<div class="corner"><button class="btn small gray" id="mute">🔊</button></div>
+
+<!-- 입장 -->
+<section class="screen grass-bg" id="join">
+  <div class="box">
+    <h1 class="title">교실 축구</h1>
+    <p class="sub">선생님 화면의 숫자 4개를 넣어요</p>
+    <form class="form" id="joinForm" autocomplete="off">
+      <label for="code">방 코드</label>
+      <input class="field" id="code" inputmode="numeric" maxlength="4" placeholder="1234">
+      <label for="name">내 이름</label>
+      <input class="field" id="name" maxlength="8" placeholder="이름">
+      <button class="btn" type="submit">들어가기 ▶</button>
+      <div class="err" id="joinErr"></div>
+    </form>
+  </div>
+</section>
+
+<!-- 기다리기 -->
+<section class="screen grass-bg hidden" id="wait">
+  <div class="box wait">
+    <div class="sub" id="waitClass"></div>
+    <div class="me" id="waitName"></div>
+    <div><span class="team-badge none" id="waitTeam">팀 기다리는 중…</span></div>
+    <div class="lists">
+      <div class="red"><h4>빨강</h4><ul id="lRed"></ul></div>
+      <div class="blue"><h4>파랑</h4><ul id="lBlue"></ul></div>
+      <div><h4>관전</h4><ul id="lBench"></ul></div>
+    </div>
+    <p class="sub" style="margin-top:16px">움직이기 ← ↑ → ↓ (WASD) · 패스 Z (J) · 슛 X (K)</p>
+  </div>
+</section>
+
+<!-- 경기 -->
+<section class="game hidden" id="game">
+  <div id="view" style="width:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0"></div>
+</section>
+
+<!-- 결과 -->
+<section class="screen grass-bg hidden" id="result">
+  <div class="box result" id="resultBox"></div>
+</section>
+
+<script type="module" src="js/kid.js"></script>
+</body>
+</html>

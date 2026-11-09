@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>교실 축구 선생님</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.39.9/dist/galmuri.css">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ctext y=%2214%22 font-size=%2214%22%3E%E2%9A%BD%3C/text%3E%3C/svg%3E">
+<style>
+  body { overflow: auto; }
+  .classes { display: grid; gap: 10px; margin: 10px 0 18px; }
+  .lobby { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr auto; gap: 12px; padding: 14px 18px; }
+  .top { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .code { font-family: Galmuri14, sans-serif; font-size: 64px; color: var(--gold); letter-spacing: 10px; text-shadow: 4px 4px 0 var(--red-d); line-height: 1; }
+  .how { color: var(--dim); font-size: 16px; line-height: 1.6; }
+  .how b { color: #fff; font-size: 20px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; min-height: 0; }
+  .col { background: #0f111c; border: 4px solid var(--line); padding: 10px; overflow: auto; }
+  .col h3 { margin: 0 0 8px; font-size: 18px; }
+  .col.red { border-color: var(--red-d); }
+  .col.blue { border-color: var(--blue-d); }
+  .col.red h3 { color: #ff8a8a; }
+  .col.blue h3 { color: #8ab8ff; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; margin: 4px; background: var(--panel); border: 3px solid var(--line); }
+  .chip button { background: none; border: 0; cursor: pointer; padding: 6px 8px; font-size: 16px; }
+  .chip .x { color: #ff8a8a; padding: 6px 8px 6px 2px; }
+  .chip.off { opacity: .45; }
+  .chip.red { border-color: var(--red); }
+  .chip.blue { border-color: var(--blue); }
+  .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .bar .sp { flex: 1; }
+  .modal { position: fixed; inset: 0; background: #000b; display: flex; align-items: center; justify-content: center; z-index: 30; padding: 16px; }
+  .modal .box { max-height: 86vh; overflow: auto; width: min(640px, 96vw); }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: 6px 8px; border-bottom: 2px solid var(--line); text-align: center; }
+  th { color: var(--dim); font-weight: normal; }
+  td:nth-child(2) { text-align: left; }
+  .tctl { position: fixed; right: 10px; bottom: 8px; display: flex; gap: 6px; z-index: 6; }
+</style>
+</head>
+<body>
+<div class="corner"><button class="btn small gray" id="records">📋 기록</button><button class="btn small gray" id="mute">🔊</button></div>
+
+<!-- 반 고르기 -->
+<section class="screen grass-bg" id="pick">
+  <div class="box" style="width:min(440px,94vw)">
+    <h1 class="title">교실 축구</h1>
+    <p class="sub">선생님 화면</p>
+    <div class="classes" id="classList"></div>
+    <form class="form" id="newClass" style="width:100%" autocomplete="off">
+      <label for="cname">새 반 만들기 (예: 6-3)</label>
+      <input class="field" id="cname" maxlength="12" placeholder="반 이름">
+      <button class="btn" type="submit">반 만들기</button>
+      <div class="err" id="pickErr"></div>
+    </form>
+    <p class="sub" style="font-size:13px;margin-top:10px">반은 이 브라우저에 기억돼요. 기록은 반마다 계속 쌓여요.</p>
+  </div>
+</section>
+
+<!-- 대기실·팀 짜기 -->
+<section class="lobby hidden" id="lobby">
+  <div class="top">
+    <div>
+      <div class="sub" style="margin:0;text-align:left" id="lobbyClass"></div>
+      <div class="code" id="code">----</div>
+    </div>
+    <div class="how">아이들은 <b id="addr"></b> 에 들어가<br>방 코드와 이름을 넣어요 · 들어온 아이 <b id="count">0</b>명</div>
+  </div>
+  <div class="cols">
+    <div class="col red"><h3>빨강 <span id="nRed"></span></h3><div id="cRed"></div></div>
+    <div class="col blue"><h3>파랑 <span id="nBlue"></span></h3><div id="cBlue"></div></div>
+    <div class="col"><h3>관전·대기 <span id="nBench"></span></h3><div id="cBench"></div></div>
+  </div>
+  <div class="bar">
+    <span class="sub" style="margin:0">이름을 누르면 빨강 → 파랑 → 관전 · ✕ 내보내기</span>
+    <span class="sp"></span>
+    <label class="sub" style="margin:0">한 판 최대
+      <select id="max" class="field" style="width:auto;font-size:16px;padding:4px 8px">
+        <option>4</option><option>6</option><option>8</option><option>10</option><option selected>12</option>
+      </select>명</label>
+    <button class="btn blue" id="random">🎲 랜덤 팀</button>
+    <button class="btn" id="start">시작 ▶</button>
+    <button class="btn gray small" id="back">반 바꾸기</button>
+  </div>
+</section>
+
+<!-- 경기 -->
+<section class="game hidden" id="game">
+  <div id="view" style="width:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0"></div>
+  <div class="tctl"><button class="btn small gray" id="pause">⏸ 일시정지</button><button class="btn small red" id="stop">■ 강제 종료</button></div>
+</section>
+
+<!-- 결과 -->
+<section class="screen grass-bg hidden" id="result">
+  <div class="box result" style="min-width:360px">
+    <div id="resultBox"></div>
+    <div style="text-align:center;margin-top:16px"><button class="btn" id="next">다음 판 ▶</button></div>
+  </div>
+</section>
+
+<div class="modal hidden" id="recModal">
+  <div class="box">
+    <div style="display:flex;align-items:center"><h2 style="margin:0;flex:1" id="recTitle">기록</h2><button class="btn small gray" id="recClose">닫기</button></div>
+    <div id="recBody"></div>
+  </div>
+</div>
+
+<script type="module" src="js/teacher.js"></script>
+</body>
+</html>
