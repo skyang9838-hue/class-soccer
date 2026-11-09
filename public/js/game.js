@@ -31,12 +31,14 @@ const CATCH_SPEED = 115; // 이보다 빠른 공은 몸에 맞고 튕긴다
 const CARRY_GAP = PLAYER_R + BALL_R + 1; // 드리블할 때 공이 발 앞 이만큼
 const NO_CATCH_AFTER_KICK = 0.25;
 // 태클
-const TACKLE_TIME = 0.24;
-const TACKLE_SPEED = 95;
-const TACKLE_COOL = 0.9;
-const TACKLE_REACH = PLAYER_R + BALL_R + 4;
-const STUN_TIME = 0.7;
-const STEAL_SAFE = 0.35; // 막 빼앗은 아이는 잠깐 안 빼앗긴다
+// 스탠딩 태클: 공 가진 상대에게 붙어서 누르면 그 자리에서 뺏는다 (앞·옆·뒤 모두)
+const TACKLE_BODY_REACH = PLAYER_R * 2 + 6; // 상대 몸까지
+const TACKLE_BALL_REACH = PLAYER_R + BALL_R + 5; // 또는 공까지
+const TACKLE_COOL = 0.6;
+const WHIFF_TIME = 0.3; // 헛발이면 잠깐 느려진다
+const WHIFF_SPEED = 0.4;
+const STUN_TIME = 0.6;
+const STEAL_SAFE = 0.6; // 막 빼앗은 아이는 잠깐 안 빼앗긴다 (핑퐁 막기)
 
 // team: 'red'은 왼쪽 골을 지키고 오른쪽으로 공격, 'blue'는 반대.
 
@@ -62,7 +64,8 @@ export function createMatch(roster, opts = {}) {
       cool: 0,
       kickAnim: 0,
       noCatch: 0,
-      tackleT: 0,
+      tackleT: 0, // 화면용: 태클 동작 남은 시간
+      whiff: 0,
       tackleCool: 0,
       stun: 0,
       input: { dx: 0, dy: 0, pass: false, shoot: false, power: 0.5 },
@@ -100,7 +103,7 @@ function placeKickoff(m, team) {
       p.vx = p.vy = 0;
       p.fx = -dir;
       p.fy = 0;
-      p.cool = p.kickAnim = p.noCatch = p.tackleT = p.tackleCool = p.stun = 0;
+      p.cool = p.kickAnim = p.noCatch = p.tackleT = p.tackleCool = p.stun = p.whiff = 0;
     });
     // 공을 잡는 팀은 맨 앞 한 명이 공 바로 옆에 선다 (맨 뒤 가운데 자리는 비우지 않는다)
     if (side === team && list.length) {
@@ -193,7 +196,6 @@ export function step(m, dt = TICK) {
   movePlayers(m, dt);
   separatePlayers(m);
   actions(m);
-  tackles(m);
   let goalTeam;
   if (m.ball.owner != null) {
     carry(m);
@@ -232,12 +234,9 @@ function movePlayers(m, dt) {
       p.vx = p.vy = 0;
       continue;
     }
-    if (p.tackleT > 0) {
-      // 미끄러지는 중: 키와 상관없이 보는 방향으로
-      p.tackleT -= dt;
-      p.vx = p.fx * TACKLE_SPEED;
-      p.vy = p.fy * TACKLE_SPEED;
-    } else {
+    if (p.tackleT > 0) p.tackleT -= dt;
+    if (p.whiff > 0) p.whiff -= dt;
+    {
       let { dx, dy } = p.input;
       const len = Math.hypot(dx, dy);
       if (len > 0) {
@@ -246,7 +245,8 @@ function movePlayers(m, dt) {
         p.fx = dx;
         p.fy = dy;
       }
-      const sp = m.ball.owner === p.id ? DRIBBLE_SPEED : PLAYER_SPEED;
+      let sp = m.ball.owner === p.id ? DRIBBLE_SPEED : PLAYER_SPEED;
+      if (p.whiff > 0) sp *= WHIFF_SPEED;
       p.vx = dx * sp;
       p.vy = dy * sp;
     }
@@ -265,7 +265,7 @@ function actions(m) {
     const wantPass = p.input.pass;
     p.input.shoot = p.input.pass = false;
     if (!wantShoot && !wantPass) continue;
-    if (p.stun > 0 || p.tackleT > 0) continue;
+    if (p.stun > 0) continue;
     const mine = b.owner === p.id;
     const d = Math.hypot(b.x - p.x, b.y - p.y);
     const canKick = p.cool <= 0 && (mine || (b.owner == null && d <= KICK_RANGE));
@@ -274,12 +274,7 @@ function actions(m) {
       continue;
     }
     // 공이 없을 때 패스 키 = 태클
-    if (wantPass && !mine && p.tackleCool <= 0) {
-      p.tackleT = TACKLE_TIME;
-      p.tackleCool = TACKLE_COOL;
-      p.kickAnim = TACKLE_TIME;
-      m.events.push({ e: 'tackle' });
-    }
+    if (wantPass && !mine && p.tackleCool <= 0) standTackle(m, p);
   }
 }
 
@@ -359,24 +354,33 @@ function passTarget(m, p, power = 0.5) {
   return best;
 }
 
-function tackles(m) {
+function standTackle(m, p) {
   const b = m.ball;
-  for (const t of m.players) {
-    if (t.tackleT <= 0) continue;
-    const d = Math.hypot(b.x - t.x, b.y - t.y);
-    if (d > TACKLE_REACH) continue;
-    const owner = b.owner != null ? byId(m, b.owner) : null;
-    if (owner === t) continue;
-    if (owner && owner.team === t.team) continue; // 우리 팀 공은 안 뺏는다
-    if (owner && b.safe > 0) continue;
-    if (owner) {
+  p.tackleCool = TACKLE_COOL;
+  p.tackleT = 0.2;
+  const owner = b.owner != null ? byId(m, b.owner) : null;
+  if (owner && owner.team !== p.team && b.safe <= 0) {
+    const body = Math.hypot(owner.x - p.x, owner.y - p.y);
+    const ball = Math.hypot(b.x - p.x, b.y - p.y);
+    if (body <= TACKLE_BODY_REACH || ball <= TACKLE_BALL_REACH) {
       owner.stun = STUN_TIME;
       owner.noCatch = STUN_TIME;
+      take(m, p);
+      // 뺏은 아이는 공 쪽을 본다
+      const dx = b.x - p.x;
+      const dy = b.y - p.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0.5) {
+        p.fx = dx / d;
+        p.fy = dy / d;
+      }
       m.events.push({ e: 'steal' });
+      return;
     }
-    t.tackleT = 0;
-    take(m, t);
   }
+  // 헛발
+  p.whiff = WHIFF_TIME;
+  m.events.push({ e: 'tackle' });
 }
 
 function take(m, p) {

@@ -220,28 +220,46 @@ describe('경기 계산', () => {
     expect(carried).toBeLessThan(45); // 보통 속도(46)보다 느림
   });
 
-  it('공 없이 패스 키 = 태클: 상대 공을 뺏고 상대는 잠깐 어지럽다', () => {
+  it('스탠딩 태클: 붙어서 누르면 바로 뺏고, 뒤에서(백태클)도 된다', () => {
     const m = playing();
     const [a, b] = m.players;
+    // 파랑(b)이 오른쪽을 보고 공을 몰고, 빨강(a)은 바로 뒤
     m.ball.owner = 2;
     m.ball.safe = 0;
     b.x = 120;
     b.y = 60;
-    b.fx = -1;
+    b.fx = 1;
     b.fy = 0;
-    a.x = 100;
+    a.x = 110;
     a.y = 60;
     a.fx = 1;
     a.fy = 0;
     setInput(m, 1, { pass: true });
-    let stole = false;
-    for (let i = 0; i < 10; i++) {
-      step(m);
-      if (m.events.some((e) => e.e === 'steal')) stole = true;
-    }
-    expect(stole).toBe(true);
+    step(m);
+    expect(m.events.some((e) => e.e === 'steal')).toBe(true);
     expect(m.ball.owner).toBe(1);
     expect(b.stun).toBeGreaterThan(0);
+    // 막 뺏은 아이는 잠깐 안 뺏긴다
+    b.stun = 0;
+    b.tackleCool = 0;
+    setInput(m, 2, { pass: true });
+    step(m);
+    expect(m.ball.owner).toBe(1);
+  });
+
+  it('멀리서 태클하면 헛발 → 잠깐 느려진다', () => {
+    const m = playing();
+    const [a, b] = m.players;
+    m.ball.owner = 2;
+    m.ball.safe = 0;
+    b.x = 200;
+    b.y = 60;
+    a.x = 100;
+    a.y = 60;
+    setInput(m, 1, { pass: true });
+    step(m);
+    expect(m.ball.owner).toBe(2);
+    expect(a.whiff).toBeGreaterThan(0);
   });
 
   it('패스·슛만 눌러도 움직이던 방향은 그대로', () => {

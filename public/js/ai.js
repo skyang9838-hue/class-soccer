@@ -107,7 +107,8 @@ export function createAI(m, aiIds, level = 'normal') {
     const dy = ty - p.y;
     const d = Math.hypot(b.x - p.x, b.y - p.y);
     const o = { dx: sgn(dx, 1.5), dy: sgn(dy, 1.5) };
-    if (owner && owner.team !== team && d < 13 && p.tackleCool <= 0 && Math.random() < L.tackle) {
+    const od = owner ? Math.hypot(owner.x - p.x, owner.y - p.y) : Infinity;
+    if (owner && owner.team !== team && (d < 12 || od < 13) && p.tackleCool <= 0 && Math.random() < L.tackle) {
       o.pass = true; // 공 없을 때 패스 키 = 태클
     }
     return o;
