@@ -230,7 +230,7 @@ export class ClassRoom extends DurableObject {
     const id = this.matchIds.get(who.name);
     if (id == null) return;
     if (msg.t === 'i') setInput(this.match, id, { dx: msg.dx, dy: msg.dy });
-    else if (msg.t === 'k') setInput(this.match, id, { pass: msg.a === 'pass', shoot: msg.a === 'shoot' });
+    else if (msg.t === 'k') setInput(this.match, id, { pass: msg.a === 'pass', shoot: msg.a === 'shoot', power: msg.p ?? 0.5 });
   }
 
   onTeacher(ws, msg) {

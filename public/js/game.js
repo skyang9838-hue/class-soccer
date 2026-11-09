@@ -65,7 +65,7 @@ export function createMatch(roster, opts = {}) {
       tackleT: 0,
       tackleCool: 0,
       stun: 0,
-      input: { dx: 0, dy: 0, pass: false, shoot: false },
+      input: { dx: 0, dy: 0, pass: false, shoot: false, power: 0.5 },
     })),
     events: [],
     doubleAnnounced: false,
@@ -144,6 +144,8 @@ export function setInput(m, id, input) {
   if ('dy' in input) p.input.dy = clampUnit(input.dy);
   if (input.pass) p.input.pass = true;
   if (input.shoot) p.input.shoot = true;
+  // 게이지 0~1 (안 주면 중간)
+  if (input.pass || input.shoot) p.input.power = 'power' in input ? clamp(Number(input.power) || 0, 0, 1) : 0.5;
 }
 
 function clampUnit(v) {
@@ -268,7 +270,7 @@ function actions(m) {
     const d = Math.hypot(b.x - p.x, b.y - p.y);
     const canKick = p.cool <= 0 && (mine || (b.owner == null && d <= KICK_RANGE));
     if (canKick) {
-      kick(m, p, wantShoot);
+      kick(m, p, wantShoot, p.input.power);
       continue;
     }
     // 공이 없을 때 패스 키 = 태클
@@ -281,7 +283,7 @@ function actions(m) {
   }
 }
 
-function kick(m, p, shoot) {
+function kick(m, p, shoot, power = 0.5) {
   const b = m.ball;
   p.cool = KICK_COOLDOWN;
   p.kickAnim = 0.2;
@@ -293,16 +295,18 @@ function kick(m, p, shoot) {
   if (shoot) {
     // 자동 슛: 보는 방향과 상관없이 상대 골문 안쪽으로 (조금 흔들림)
     const gx = p.team === 'red' ? FIELD.right + GOAL_DEPTH / 2 : FIELD.left - GOAL_DEPTH / 2;
-    const gy = CY + (Math.random() * 2 - 1) * GOAL_HALF * 0.7;
+    // 세게 찰수록 조금 더 흔들린다
+    const gy = CY + (Math.random() * 2 - 1) * GOAL_HALF * (0.45 + power * 0.45);
     const tx = gx - b.x;
     const ty = gy - b.y;
     const td = Math.hypot(tx, ty) || 1;
-    b.vx = (tx / td) * SHOOT_SPEED;
-    b.vy = (ty / td) * SHOOT_SPEED;
+    const ss = SHOOT_SPEED * (0.6 + power * 0.55);
+    b.vx = (tx / td) * ss;
+    b.vy = (ty / td) * ss;
     m.events.push({ e: 'shoot' });
   } else {
     // 자동 패스: 받기 좋은 우리 편에게, 달려가는 앞쪽으로, 발에 붙을 세기로
-    const mate = passTarget(m, p);
+    const mate = passTarget(m, p, power);
     if (mate) {
       let tx = mate.x - b.x;
       let ty = mate.y - b.y;
@@ -312,7 +316,7 @@ function kick(m, p, shoot) {
       tx = clamp(mate.x + mate.vx * lead, FIELD.left + 6, FIELD.right - 6) - b.x;
       ty = clamp(mate.y + mate.vy * lead, FIELD.top + 6, FIELD.bottom - 6) - b.y;
       td = Math.hypot(tx, ty) || 1;
-      sp = clamp(PASS_MIN + td * 0.55, PASS_MIN, PASS_MAX);
+      sp = clamp(PASS_MIN + td * 0.55, PASS_MIN, PASS_MAX) * (0.8 + power * 0.45);
       b.vx = (tx / td) * sp;
       b.vy = (ty / td) * sp;
     } else {
@@ -325,7 +329,7 @@ function kick(m, p, shoot) {
 }
 
 // 받기 좋은 우리 편: 가깝고, 상대 골 쪽에 있고, 가는 길에 상대가 덜 막는 아이
-function passTarget(m, p) {
+function passTarget(m, p, power = 0.5) {
   const fwd = p.team === 'red' ? 1 : -1;
   let best = null;
   let bestScore = -Infinity;
@@ -335,7 +339,9 @@ function passTarget(m, p) {
     const dy = q.y - p.y;
     const d = Math.hypot(dx, dy) || 1;
     if (d > 190) continue;
-    let score = -Math.abs(d - 60) * 0.6 + dx * fwd * 0.35;
+    // 게이지가 길수록 먼 아이를 고른다 (짧게 = 30, 가득 = 150 근처)
+    const want = 30 + power * 120;
+    let score = -Math.abs(d - want) * 0.6 + dx * fwd * 0.35;
     for (const o of m.players) {
       if (o.team === p.team) continue;
       const ox = o.x - p.x;

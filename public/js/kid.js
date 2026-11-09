@@ -136,9 +136,15 @@ function leaveMatch() {
   sendInput(true);
 }
 
-function sendKick(a) {
-  if (solo) solo.kick(a);
-  else if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'k', a }));
+function sendKick(a, power = 0.5) {
+  if (solo) solo.kick(a, power);
+  else if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'k', a, p: Math.round(power * 100) / 100 }));
+}
+
+let charge = null;
+function startCharge(a) {
+  charge = { a, t0: performance.now() };
+  view.setCharge(charge);
 }
 
 // ───── 혼자 연습
@@ -216,15 +222,28 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     held.add(KEYS[e.code]);
     sendInput();
-  } else if (!e.repeat && (e.code === 'KeyZ' || e.code === 'KeyJ')) {
+  } else if (e.code === 'KeyZ' || e.code === 'KeyJ') {
     e.preventDefault();
-    sendKick('pass');
-  } else if (!e.repeat && (e.code === 'KeyX' || e.code === 'KeyK')) {
+    if (e.repeat || charge) return;
+    // 공이 없으면 바로 태클, 있으면 게이지 모으기
+    if (!view.myHasBall()) sendKick('pass', 0.5);
+    else startCharge('pass');
+  } else if (e.code === 'KeyX' || e.code === 'KeyK') {
     e.preventDefault();
-    sendKick('shoot');
+    if (e.repeat || charge) return;
+    startCharge('shoot');
   }
 });
 window.addEventListener('keyup', (e) => {
+  const a = e.code === 'KeyZ' || e.code === 'KeyJ' ? 'pass' : e.code === 'KeyX' || e.code === 'KeyK' ? 'shoot' : null;
+  if (a && charge && charge.a === a) {
+    const power = Math.min(1, (performance.now() - charge.t0) / 1000);
+    charge = null;
+    view.setCharge(null);
+    // 모으는 사이 공을 뺏겼으면 패스는 버린다 (태클로 바뀌지 않게)
+    if (a === 'shoot' || view.myHasBall()) sendKick(a, power);
+    return;
+  }
   if (KEYS[e.code]) {
     held.delete(KEYS[e.code]);
     sendInput();
@@ -232,6 +251,8 @@ window.addEventListener('keyup', (e) => {
 });
 window.addEventListener('blur', () => {
   held.clear();
+  charge = null;
+  view.setCharge(null);
   sendInput();
 });
 // 키 입력이 사라져도 서버가 맞춰지게 가끔 다시 보낸다

@@ -14,7 +14,7 @@ export function createView(root) {
         <div class="clock"><b data-t>3:00</b><span data-dbl class="dbl hidden">⚡ 한 골 2점</span></div>
         <div class="score blue"><b data-b>0</b><span class="tname">파랑</span></div>
       </div>
-      <div class="keyhint" data-keys>← ↑ → ↓ 움직이기 · Z 패스 (공 없으면 태클) · X 슛</div>
+      <div class="keyhint" data-keys>← ↑ → ↓ 움직이기 · Z 꾹 패스 (공 없으면 태클) · X 꾹 슛</div>
       <div class="banner hidden" data-banner></div>
       <div class="ribbon hidden" data-ribbon></div>
     </div>`;
@@ -39,6 +39,7 @@ export function createView(root) {
   let ballSpin = 0;
   let lastBall = null;
   let paused = false;
+  let charge = null; // { a: 'pass'|'shoot', t0 }
 
   function fit() {
     const availW = root.clientWidth || window.innerWidth;
@@ -110,6 +111,17 @@ export function createView(root) {
     paused = on;
     if (on) showBanner('⏸ 잠깐 멈춤', 0);
     else banner.classList.add('hidden');
+  }
+
+  function myHasBall() {
+    const s = snaps[snaps.length - 1];
+    if (!s || you == null) return false;
+    const q = s.p.find((x) => x[0] === you);
+    return !!(q && q[8]);
+  }
+
+  function setCharge(c) {
+    charge = c;
   }
 
   function push(s) {
@@ -213,7 +225,24 @@ export function createView(root) {
         }
         tg.font = `${fs}px Galmuri11, Galmuri9, sans-serif`;
       }
-      if (mine) {
+      if (mine && charge) {
+        // 게이지: 이름표 위
+        const v = Math.min(1, (performance.now() - charge.t0) / 1000);
+        const gw = fs * 4.8;
+        const gh = Math.max(7, fs * 0.7);
+        const gy = y - fs - 6 - gh - fs * 0.9;
+        tg.fillStyle = '#1a1c2c';
+        tg.fillRect(x - gw / 2 - 2, gy - 2, gw + 4, gh + 4);
+        tg.fillStyle = '#3a4466';
+        tg.fillRect(x - gw / 2, gy, gw, gh);
+        tg.fillStyle = charge.a === 'shoot' ? (v > 0.85 ? '#ff4d4d' : v > 0.5 ? '#ffb000' : '#ffe14d') : '#5fd3ff';
+        tg.fillRect(x - gw / 2, gy, gw * v, gh);
+        tg.fillStyle = '#fff';
+        tg.font = `${Math.round(fs * 0.8)}px Galmuri11, sans-serif`;
+        tg.fillText(charge.a === 'shoot' ? '슛' : '패스', x - gw / 2 - fs * 1.1, gy + gh + 2);
+        tg.font = `${fs}px Galmuri11, Galmuri9, sans-serif`;
+      }
+      if (mine && !charge) {
         const bob = Math.sin(t * 6) * scale * 0.6;
         const ty = y - fs - 6 + bob;
         tg.fillStyle = '#ffe14d';
@@ -230,5 +259,5 @@ export function createView(root) {
     }
   }
 
-  return { start, stop, push, setPaused, showBanner, fit };
+  return { start, stop, push, setPaused, showBanner, fit, myHasBall, setCharge };
 }

@@ -74,11 +74,11 @@ export function createAI(m, aiIds, level = 'normal') {
     ux /= gd;
     uy /= gd;
     if (gd < L.range && Math.random() < L.shoot) {
-      return { dx: sgn(ux, 0.3), dy: sgn(uy, 0.38), shoot: true };
+      return { dx: sgn(ux, 0.3), dy: sgn(uy, 0.38), shoot: true, power: 0.3 + Math.random() * 0.6 };
     }
     const block = blocker(p, ux, uy);
     if (block) {
-      if (Math.random() < L.pass) return { dx: sgn(ux, 0.3), dy: sgn(uy, 0.38), pass: true };
+      if (Math.random() < L.pass) return { dx: sgn(ux, 0.3), dy: sgn(uy, 0.38), pass: true, power: Math.random() };
       // 막은 상대를 옆으로 비켜 간다
       const side = (block.x - p.x) * uy - (block.y - p.y) * ux > 0 ? -1 : 1;
       const sx = ux - uy * side * 1.2;

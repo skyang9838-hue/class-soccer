@@ -29,8 +29,8 @@ export function startSolo({ name, perTeam, level, matchTime, onMatch, onSnap, on
     input(dx, dy) {
       setInput(m, 1, { dx, dy });
     },
-    kick(a) {
-      setInput(m, 1, { pass: a === 'pass', shoot: a === 'shoot' });
+    kick(a, power = 0.5) {
+      setInput(m, 1, { pass: a === 'pass', shoot: a === 'shoot', power });
     },
     pause(on) {
       paused = on;

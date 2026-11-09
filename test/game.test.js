@@ -136,7 +136,7 @@ describe('경기 계산', () => {
     expect(result(m).winner).toBe(null);
   });
 
-  it('슛은 보는 방향으로 세게, 패스는 우리 팀 쪽으로', () => {
+  it('슛은 보는 방향과 상관없이 상대 골로, 게이지가 찰수록 세게 · 패스는 우리 팀 쪽으로', () => {
     const team = [
       { id: 1, name: '가', team: 'red' },
       { id: 3, name: '다', team: 'red' },
@@ -164,9 +164,19 @@ describe('경기 계산', () => {
     m.ball.x = a.x + 5;
     m.ball.y = a.y;
     m.ball.vx = m.ball.vy = 0;
-    setInput(m, 1, { dx: 0, dy: 0, shoot: true });
+    a.fx = -1; // 반대쪽을 보고 있어도
+    setInput(m, 1, { dx: 0, dy: 0, shoot: true, power: 0 });
     step(m);
-    expect(m.ball.vx).toBeGreaterThan(150);
+    const weak = m.ball.vx;
+    expect(weak).toBeGreaterThan(60); // 빨강은 오른쪽 골로
+    run(m, 0.4);
+    m.ball.owner = null;
+    m.ball.x = a.x + 5;
+    m.ball.y = a.y;
+    m.ball.vx = m.ball.vy = 0;
+    setInput(m, 1, { dx: 0, dy: 0, shoot: true, power: 1 });
+    step(m);
+    expect(m.ball.vx).toBeGreaterThan(weak * 1.4);
   });
 
   it('인원이 안 맞아도 자리가 모두 경기장 안이다', () => {
