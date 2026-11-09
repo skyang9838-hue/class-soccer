@@ -206,8 +206,8 @@ describe('경기 계산', () => {
     expect(m.ball.owner).toBe(1);
     expect(m.ball.x).toBeGreaterThan(a.x);
     const carried = a.x - x0;
-    expect(carried).toBeGreaterThan(45);
-    expect(carried).toBeLessThan(60); // 보통 속도(62)보다 느림
+    expect(carried).toBeGreaterThan(34);
+    expect(carried).toBeLessThan(45); // 보통 속도(46)보다 느림
   });
 
   it('공 없이 패스 키 = 태클: 상대 공을 뺏고 상대는 잠깐 어지럽다', () => {

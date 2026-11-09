@@ -2,10 +2,11 @@
 // 팀마다: 공에 제일 가까운 한 명이 공을 쫓고(가지면 골로 몰고), 우리 골에 제일 가까운 한 명은 막고, 나머지는 자리를 지키며 따라간다.
 import { FIELD, CX, CY, formation, setInput } from './game.js';
 
+// think: 한 틱(1/30초)에 판단을 새로 할 확률 → 보통은 약 0.2초에 한 번
 const LEVELS = {
-  easy: { think: 0.35, shoot: 0.04, aim: 18, range: 100, tackle: 0.03, pass: 0.02 },
-  normal: { think: 0.7, shoot: 0.1, aim: 10, range: 125, tackle: 0.08, pass: 0.04 },
-  hard: { think: 1, shoot: 0.2, aim: 5, range: 145, tackle: 0.16, pass: 0.06 },
+  easy: { think: 0.1, shoot: 0.015, aim: 18, range: 80, tackle: 0.012, pass: 0.02 },
+  normal: { think: 0.17, shoot: 0.03, aim: 10, range: 100, tackle: 0.03, pass: 0.03 },
+  hard: { think: 0.3, shoot: 0.05, aim: 5, range: 125, tackle: 0.06, pass: 0.05 },
 };
 
 export function createAI(m, aiIds, level = 'normal') {
@@ -120,7 +121,7 @@ export function createAI(m, aiIds, level = 'normal') {
     const d = Math.hypot(vx, vy) || 1;
     const k = Math.min(34, d * 0.45) / d;
     const tx = ownX + vx * k;
-    const ty = Math.max(CY - 26, Math.min(CY + 26, CY + vy * k));
+    const ty = Math.max(CY - 30, Math.min(CY + 30, CY + vy * k));
     const o = { dx: sgn(tx - p.x, 2), dy: sgn(ty - p.y, 2) };
     if (owner && owner.team !== team) {
       const od = Math.hypot(owner.x - p.x, owner.y - p.y);

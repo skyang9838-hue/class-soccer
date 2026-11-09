@@ -17,22 +17,22 @@ export const GOAL_PAUSE = 2.2;
 
 const PLAYER_R = 4;
 const BALL_R = 2.5;
-const PLAYER_SPEED = 56;
-const DRIBBLE_SPEED = 48; // 공을 가지면 조금 느리다
-const BALL_DECAY = 1.1; // 초당 감속 (지수)
+const PLAYER_SPEED = 46;
+const DRIBBLE_SPEED = 40; // 공을 가지면 조금 느리다
+const BALL_DECAY = 1.35; // 초당 감속 (지수)
 const BALL_MAX = 240;
-const SHOOT_SPEED = 200;
-const PASS_MIN = 65;
-const PASS_MAX = 135;
+const SHOOT_SPEED = 165;
+const PASS_MIN = 55;
+const PASS_MAX = 105;
 const KICK_RANGE = PLAYER_R + BALL_R + 4;
 const KICK_COOLDOWN = 0.3;
 const WALL_BOUNCE = 0.8;
-const CATCH_SPEED = 120; // 이보다 빠른 공은 몸에 맞고 튕긴다
+const CATCH_SPEED = 115; // 이보다 빠른 공은 몸에 맞고 튕긴다
 const CARRY_GAP = PLAYER_R + BALL_R + 1; // 드리블할 때 공이 발 앞 이만큼
 const NO_CATCH_AFTER_KICK = 0.25;
 // 태클
 const TACKLE_TIME = 0.24;
-const TACKLE_SPEED = 115;
+const TACKLE_SPEED = 95;
 const TACKLE_COOL = 0.9;
 const TACKLE_REACH = PLAYER_R + BALL_R + 4;
 const STUN_TIME = 0.7;
@@ -291,16 +291,28 @@ function kick(m, p, shoot) {
   b.x = p.x + p.fx * CARRY_GAP;
   b.y = p.y + p.fy * CARRY_GAP;
   if (shoot) {
-    b.vx = p.fx * SHOOT_SPEED;
-    b.vy = p.fy * SHOOT_SPEED;
+    // 자동 슛: 보는 방향과 상관없이 상대 골문 안쪽으로 (조금 흔들림)
+    const gx = p.team === 'red' ? FIELD.right + GOAL_DEPTH / 2 : FIELD.left - GOAL_DEPTH / 2;
+    const gy = CY + (Math.random() * 2 - 1) * GOAL_HALF * 0.7;
+    const tx = gx - b.x;
+    const ty = gy - b.y;
+    const td = Math.hypot(tx, ty) || 1;
+    b.vx = (tx / td) * SHOOT_SPEED;
+    b.vy = (ty / td) * SHOOT_SPEED;
     m.events.push({ e: 'shoot' });
   } else {
+    // 자동 패스: 받기 좋은 우리 편에게, 달려가는 앞쪽으로, 발에 붙을 세기로
     const mate = passTarget(m, p);
     if (mate) {
-      const tx = mate.x - b.x;
-      const ty = mate.y - b.y;
-      const td = Math.hypot(tx, ty) || 1;
-      const sp = clamp(PASS_MIN + td * 0.9, PASS_MIN, PASS_MAX);
+      let tx = mate.x - b.x;
+      let ty = mate.y - b.y;
+      let td = Math.hypot(tx, ty) || 1;
+      let sp = clamp(PASS_MIN + td * 0.55, PASS_MIN, PASS_MAX);
+      const lead = Math.min(0.9, td / sp);
+      tx = clamp(mate.x + mate.vx * lead, FIELD.left + 6, FIELD.right - 6) - b.x;
+      ty = clamp(mate.y + mate.vy * lead, FIELD.top + 6, FIELD.bottom - 6) - b.y;
+      td = Math.hypot(tx, ty) || 1;
+      sp = clamp(PASS_MIN + td * 0.55, PASS_MIN, PASS_MAX);
       b.vx = (tx / td) * sp;
       b.vy = (ty / td) * sp;
     } else {
@@ -312,18 +324,28 @@ function kick(m, p, shoot) {
   touch(b, p);
 }
 
-// 패스는 보는 쪽에 있는 우리 팀 중 가까운 아이에게 (없으면 그냥 가까운 아이)
+// 받기 좋은 우리 편: 가깝고, 상대 골 쪽에 있고, 가는 길에 상대가 덜 막는 아이
 function passTarget(m, p) {
+  const fwd = p.team === 'red' ? 1 : -1;
   let best = null;
-  let bestScore = Infinity;
+  let bestScore = -Infinity;
   for (const q of m.players) {
-    if (q === p || q.team !== p.team) continue;
+    if (q === p || q.team !== p.team || q.stun > 0) continue;
     const dx = q.x - p.x;
     const dy = q.y - p.y;
     const d = Math.hypot(dx, dy) || 1;
-    const facing = (dx * p.fx + dy * p.fy) / d; // -1~1
-    const score = d * (1.6 - facing);
-    if (score < bestScore) {
+    if (d > 190) continue;
+    let score = -Math.abs(d - 60) * 0.6 + dx * fwd * 0.35;
+    for (const o of m.players) {
+      if (o.team === p.team) continue;
+      const ox = o.x - p.x;
+      const oy = o.y - p.y;
+      const along = (ox * dx + oy * dy) / d;
+      if (along < 0 || along > d) continue;
+      const off = Math.abs(ox * dy - oy * dx) / d;
+      if (off < 12) score -= (12 - off) * 4; // 길목에 상대
+    }
+    if (score > bestScore) {
       bestScore = score;
       best = q;
     }
