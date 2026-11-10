@@ -76,6 +76,7 @@ $('joinForm').onsubmit = (e) => {
 };
 
 let lastMsgAt = 0;
+let pingAt = 0;
 function connect() {
   clearTimeout(retryTimer);
   // 앞의 창이 남아 있으면 먼저 닫는다 (두 번 눌러 연결이 두 개 생기지 않게)
@@ -96,7 +97,11 @@ function connect() {
     if (ws !== sock) return;
     lastMsgAt = Date.now();
     const msg = JSON.parse(ev.data);
-    if (msg.t === 'p') return;
+    if (msg.t === 'p') {
+      if (pingAt) view.setRtt(performance.now() - pingAt);
+      pingAt = 0;
+      return;
+    }
     if (msg.t === 'error') {
       fatal = true;
       wantConnect = false;
@@ -248,6 +253,7 @@ function sendInput(force) {
   const key = dx + ',' + dy;
   if (!force && key === lastSent) return;
   lastSent = key;
+  view.setInput(dx, dy);
   if (solo) solo.input(dx, dy);
   else if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'i', dx, dy }));
 }
@@ -294,7 +300,10 @@ window.addEventListener('blur', () => {
 // 살아 있음 신호: 2초마다 보내고, 7초 넘게 아무것도 못 받으면 끊긴 걸로 보고 다시 잇는다
 setInterval(() => {
   if (!wantConnect || solo) return;
-  if (ws && ws.readyState === 1) ws.send('{"t":"p"}');
+  if (ws && ws.readyState === 1) {
+    pingAt = performance.now();
+    ws.send('{"t":"p"}');
+  }
   if (ws && Date.now() - lastMsgAt > 7000) {
     toast('연결이 끊겼어요. 다시 잇는 중…');
     connect();

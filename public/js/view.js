@@ -8,6 +8,10 @@ import { TICK } from './game.js';
 const DELAY_NET = 140; // ms (서버 경기, 15번/초)
 const DELAY_LOCAL = 70; // ms (혼자 연습)
 const TICK_MS = TICK * 1000;
+// 내 선수는 서버 답을 기다리지 않고 키 누른 대로 바로 움직여 그린다 (game.js 이동과 같은 값)
+const MY_SPEED = 46;
+const MY_DRIBBLE = 40;
+const MY_R = 4;
 
 export function createView(root) {
   root.innerHTML = `
@@ -45,6 +49,10 @@ export function createView(root) {
   let lastBall = null;
   let paused = false;
   let charge = null; // { a: 'pass'|'shoot', t0 }
+  let pred = null; // 내 선수 예측 위치
+  let myIn = { dx: 0, dy: 0 };
+  let rtt = 300;
+  let lastFrame = 0;
 
   function fit() {
     const availW = root.clientWidth || window.innerWidth;
@@ -92,6 +100,7 @@ export function createView(root) {
     snaps = [];
     lastBall = null;
     paused = false;
+    pred = null;
     banner.classList.add('hidden');
     setRibbon(youId == null ? '관전 중' : '');
     root.querySelector('[data-keys]').classList.toggle('hidden', youId == null);
@@ -127,6 +136,14 @@ export function createView(root) {
 
   function setCharge(c) {
     charge = c;
+  }
+
+  function setInput(dx, dy) {
+    myIn = { dx, dy };
+  }
+
+  function setRtt(ms) {
+    rtt = rtt * 0.7 + Math.min(1500, ms) * 0.3;
   }
 
   function push(s) {
@@ -198,8 +215,55 @@ export function createView(root) {
         name: info.name,
       };
     });
-    const bx = lerp(a.b[0], b.b[0]);
-    const by = lerp(a.b[1], b.b[1]);
+    let bx = lerp(a.b[0], b.b[0]);
+    let by = lerp(a.b[1], b.b[1]);
+
+    // 내 선수 예측 (서버 경기에서만)
+    const dt = lastFrame ? Math.min(0.05, (now - lastFrame) / 1000) : 0;
+    lastFrame = now;
+    const latest = snaps[snaps.length - 1];
+    const lq = you != null && net ? latest.p.find((q) => q[0] === you) : null;
+    const meDrawn = lq ? players.find((p) => p.id === you) : null;
+    if (lq && meDrawn) {
+      const sx = lq[1];
+      const sy = lq[2];
+      if (!pred || latest.ph !== 'play' || lq[7] || paused) {
+        pred = { x: sx, y: sy };
+      } else {
+        let { dx, dy } = myIn;
+        const len = Math.hypot(dx, dy);
+        if (len > 0) {
+          dx /= len;
+          dy /= len;
+        }
+        const sp = lq[8] ? MY_DRIBBLE : MY_SPEED;
+        pred.x = Math.min(FIELD.right - MY_R, Math.max(FIELD.left + MY_R, pred.x + dx * sp * dt));
+        pred.y = Math.min(FIELD.bottom - MY_R, Math.max(FIELD.top + MY_R, pred.y + dy * sp * dt));
+        // 서버 위치와 차이: 왕복 시간만큼 앞서는 건 정상, 그 이상만 당겨 맞춘다
+        const ex = sx - pred.x;
+        const ey = sy - pred.y;
+        const dist = Math.hypot(ex, ey);
+        const dead = Math.min(40, MY_SPEED * (rtt / 1000 + 0.12) + 3);
+        if (dist > dead + 30) pred = { x: sx, y: sy };
+        else if (len === 0 && !lq[4]) {
+          pred.x += ex * Math.min(1, dt * 4);
+          pred.y += ey * Math.min(1, dt * 4);
+        } else if (dist > dead) {
+          const f = (1 - dead / dist) * Math.min(1, dt * 4);
+          pred.x += ex * f;
+          pred.y += ey * f;
+        }
+      }
+      // 내가 공을 갖고 있으면 공도 같이 옮겨 그린다
+      if (lq[8]) {
+        bx += pred.x - meDrawn.x;
+        by += pred.y - meDrawn.y;
+      }
+      meDrawn.x = pred.x;
+      meDrawn.y = pred.y;
+      if (myIn.dx) meDrawn.face = Math.sign(myIn.dx);
+      meDrawn.moving = (myIn.dx !== 0 || myIn.dy !== 0) && latest.ph === 'play' && !paused;
+    }
     if (lastBall) ballSpin += Math.hypot(bx - lastBall[0], by - lastBall[1]) * 0.3;
     lastBall = [bx, by];
 
@@ -269,5 +333,5 @@ export function createView(root) {
     }
   }
 
-  return { start, stop, push, setPaused, showBanner, fit, myHasBall, setCharge };
+  return { start, stop, push, setPaused, showBanner, fit, myHasBall, setCharge, setInput, setRtt };
 }
