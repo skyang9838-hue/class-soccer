@@ -1,8 +1,13 @@
 // 경기 화면 — 서버에서 받은 상태를 부드럽게 이어 그린다 (아이·선생님 공용)
 import { W, H, FIELD, TEAM, drawField, drawPlayer, drawBall, hairOf } from './pixel.js';
 import { play, startBgm, stopBgm } from './sound.js';
+import { TICK } from './game.js';
 
-const DELAY = 70; // ms. 받은 상태 두 개 사이를 그린다
+// 받은 상태 두 개 사이를 그린다. 서버 경기는 틱 번호(n)로 시간을 맞춰
+// 와이파이에서 몇 개가 늦게·한꺼번에 와도 끊기지 않게 조금 넉넉히 늦춰 그린다
+const DELAY_NET = 140; // ms (서버 경기, 15번/초)
+const DELAY_LOCAL = 70; // ms (혼자 연습)
+const TICK_MS = TICK * 1000;
 
 export function createView(root) {
   root.innerHTML = `
@@ -126,6 +131,7 @@ export function createView(root) {
 
   function push(s) {
     s.at = performance.now();
+    s.st = s.n != null ? s.n * TICK_MS : s.at; // 서버 시각(틱 번호) 기준
     snaps.push(s);
     if (snaps.length > 30) snaps.shift();
     // 소리·알림
@@ -153,18 +159,22 @@ export function createView(root) {
     if (!running) return;
     requestAnimationFrame(frame);
     if (!snaps.length) return;
-    const target = now - DELAY;
+    // 가장 빨리 도착한 것 기준으로 서버 시각 ↔ 내 시각 차이를 잡는다
+    const net = snaps[snaps.length - 1].n != null;
+    let off = Infinity;
+    for (const x of snaps) off = Math.min(off, x.at - x.st);
+    const target = now - off - (net ? DELAY_NET : DELAY_LOCAL);
     let a = snaps[0];
     let b = snaps[0];
     for (let i = snaps.length - 1; i >= 0; i--) {
-      if (snaps[i].at <= target) {
+      if (snaps[i].st <= target) {
         a = snaps[i];
         b = snaps[i + 1] || snaps[i];
         break;
       }
     }
-    const span = b.at - a.at;
-    const k = span > 0 ? Math.min(1, Math.max(0, (target - a.at) / span)) : 1;
+    const span = b.st - a.st;
+    const k = span > 0 ? Math.min(1, Math.max(0, (target - a.st) / span)) : 1;
     const lerp = (x, y) => x + (y - x) * k;
     const t = now / 1000;
 

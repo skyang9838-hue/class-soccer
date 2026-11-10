@@ -19,6 +19,8 @@ import {
 } from './room.js';
 
 const CLASS_NAME_MAX = 12;
+const SEND_EVERY = 2; // 경기 계산은 30번/초, 화면은 15번/초만 보낸다 (교실 와이파이 부담 줄이기)
+const STALE_MS = 6000; // 이만큼 아무 말 없는 창은 끊긴 것으로 본다 (아이 창은 2초마다 신호)
 
 export default {
   async fetch(req, env) {
@@ -135,6 +137,8 @@ export class ClassRoom extends DurableObject {
     this.paused = false;
     this.timer = null;
     this.lastResult = null;
+    this.n = 0; // 경기 틱 번호 (화면이 시간 맞추는 데 씀)
+    this.pendingEv = [];
   }
 
   meta(k) {
@@ -168,7 +172,7 @@ export class ClassRoom extends DurableObject {
         const reg = this.env.REGISTRY.get(this.env.REGISTRY.idFromName('registry'));
         this.code = await reg.alloc(this.meta('classId'));
       }
-      this.sockets.set(ws, { role: 'teacher' });
+      this.sockets.set(ws, { role: 'teacher', seen: Date.now() });
       this.wire(ws);
       this.send(ws, { t: 'welcome', role: 'teacher', code: this.code, className: this.meta('name') });
       this.sendLobby(ws);
@@ -178,11 +182,29 @@ export class ClassRoom extends DurableObject {
 
     // 아이
     const name = cleanName(url.searchParams.get('name'));
+    const cid = String(url.searchParams.get('cid') || '').slice(0, 40);
+    // 같은 이름이 '들어와 있음'인데, 그게 같은 노트북(cid)이거나 이미 끊긴 창이면 새 창이 자리를 넘겨받는다
+    const existing = name ? this.roster.kids.get(name) : null;
+    if (existing && existing.connected) {
+      const now = Date.now();
+      const olds = [...this.sockets].filter(([, w]) => w.role === 'kid' && w.name === name);
+      const canTake = olds.every(([, w]) => (cid && w.cid === cid) || now - w.seen > STALE_MS);
+      if (canTake) {
+        for (const [w] of olds) {
+          this.sockets.delete(w);
+          try {
+            w.send(JSON.stringify({ t: 'error', msg: '다른 창에서 같은 이름으로 들어와서 이 창은 멈췄어요' }));
+            w.close(4002, 'replaced');
+          } catch {}
+        }
+        leave(this.roster, name);
+      }
+    }
     const res = join(this.roster, name, url.searchParams.get('g'));
     if (!res.ok) {
       return fail(res.reason === 'taken' ? '같은 이름이 벌써 있어요. 다른 이름으로 들어와 주세요' : '이름을 적어 주세요');
     }
-    this.sockets.set(ws, { role: 'kid', name: res.kid.name });
+    this.sockets.set(ws, { role: 'kid', name: res.kid.name, cid, seen: Date.now() });
     this.wire(ws);
     this.send(ws, { t: 'welcome', role: 'kid', name: res.kid.name, className: this.meta('name') });
     this.broadcastLobby();
@@ -202,6 +224,8 @@ export class ClassRoom extends DurableObject {
       }
       const who = this.sockets.get(ws);
       if (!who) return;
+      who.seen = Date.now();
+      if (msg.t === 'p') return this.send(ws, { t: 'p' }); // 살아 있음 신호
       if (who.role === 'kid') this.onKid(who, msg);
       else this.onTeacher(ws, msg);
     });
@@ -315,6 +339,7 @@ export class ClassRoom extends DurableObject {
     this.matchRoster = roster;
     this.view = 'match';
     this.paused = false;
+    this.pendingEv = [];
     this.broadcastMatchStart();
     this.startTimer();
   }
@@ -343,13 +368,18 @@ export class ClassRoom extends DurableObject {
     if (!this.match) return this.stopTimer();
     if (this.paused) return;
     step(this.match);
-    const snap = JSON.stringify({ t: 's', ...snapshot(this.match) });
+    this.n++;
+    if (this.match.events.length) this.pendingEv.push(...this.match.events);
+    const end = this.match.phase === 'end';
+    if (this.n % SEND_EVERY !== 0 && !end) return;
+    const snap = JSON.stringify({ t: 's', ...snapshot(this.match), ev: this.pendingEv, n: this.n });
+    this.pendingEv = [];
     for (const [w] of this.sockets) {
       try {
         w.send(snap);
       } catch {}
     }
-    if (this.match.phase === 'end') this.endMatch(true);
+    if (end) this.endMatch(true);
   }
 
   endMatch(record) {
@@ -403,7 +433,7 @@ export class ClassRoom extends DurableObject {
   sendCurrent(w) {
     if (this.view === 'match' && this.match) {
       this.sendMatchStart(w);
-      this.send(w, { t: 's', ...snapshot(this.match), ev: [] });
+      this.send(w, { t: 's', ...snapshot(this.match), ev: [], n: this.n });
     } else if (this.view === 'result' && this.lastResult) {
       this.send(w, { t: 'result', ...this.lastResult });
     }

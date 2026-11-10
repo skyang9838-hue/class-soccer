@@ -23,6 +23,17 @@ let saved = {};
 try {
   saved = JSON.parse(localStorage.getItem('cs-kid') || '{}');
 } catch {}
+// 이 노트북 표시 (끊겼다 다시 들어올 때 내 자리를 넘겨받는 데 씀)
+let cid = '';
+try {
+  cid = localStorage.getItem('cs-cid') || '';
+  if (!cid) {
+    cid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem('cs-cid', cid);
+  }
+} catch {
+  cid = Math.random().toString(36).slice(2);
+}
 const params = new URLSearchParams(location.search);
 $('code').value = params.get('code') || saved.code || '';
 $('name').value = saved.name || '';
@@ -64,15 +75,28 @@ $('joinForm').onsubmit = (e) => {
   connect();
 };
 
+let lastMsgAt = 0;
 function connect() {
   clearTimeout(retryTimer);
+  // 앞의 창이 남아 있으면 먼저 닫는다 (두 번 눌러 연결이 두 개 생기지 않게)
+  if (ws) {
+    const old = ws;
+    ws = null;
+    try {
+      old.close();
+    } catch {}
+  }
+  lastMsgAt = Date.now();
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const url = `${proto}://${location.host}/ws/play?code=${encodeURIComponent(saved.code)}&name=${encodeURIComponent(saved.name)}&g=${saved.g || ''}`;
+  const url = `${proto}://${location.host}/ws/play?code=${encodeURIComponent(saved.code)}&name=${encodeURIComponent(saved.name)}&g=${saved.g || ''}&cid=${encodeURIComponent(cid)}`;
   const sock = new WebSocket(url);
   ws = sock;
   let fatal = false;
   sock.onmessage = (ev) => {
+    if (ws !== sock) return;
+    lastMsgAt = Date.now();
     const msg = JSON.parse(ev.data);
+    if (msg.t === 'p') return;
     if (msg.t === 'error') {
       fatal = true;
       wantConnect = false;
@@ -267,6 +291,15 @@ window.addEventListener('blur', () => {
   view.setCharge(null);
   sendInput();
 });
+// 살아 있음 신호: 2초마다 보내고, 7초 넘게 아무것도 못 받으면 끊긴 걸로 보고 다시 잇는다
+setInterval(() => {
+  if (!wantConnect || solo) return;
+  if (ws && ws.readyState === 1) ws.send('{"t":"p"}');
+  if (ws && Date.now() - lastMsgAt > 7000) {
+    toast('연결이 끊겼어요. 다시 잇는 중…');
+    connect();
+  }
+}, 2000);
 // 키 입력이 사라져도 서버가 맞춰지게 가끔 다시 보낸다
 setInterval(() => inMatch && sendInput(true), 500);
 
