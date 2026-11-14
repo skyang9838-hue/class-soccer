@@ -2,10 +2,11 @@
 
 **무엇**: 반 아이들이 교실에서 각자 노트북으로 접속해 같이 하는 도트 2D 축구 웹앱. 혼자 연습(AI) 모드도 있다. 설계 `docs/superpowers/specs/2026-11-04-class-soccer-design.md` (그 뒤 바뀐 것은 아래 "설계 이후 바뀐 것").
 
-**지금 상태** (2026-11-10)
+**지금 상태** (2026-11-14)
+- 11/14 둘이서 1대1 모드 배포: 한 컴퓨터에서 빨강 WASD·F 패스·G 슛 / 파랑 방향키·. 패스·/ 슛, AI 없음 (`solo.js` startDuo, `kid.js` duo 키 처리, view에 선수별 게이지 `locals`). 입장 화면은 작은 창에서 스크롤되게. 사용자가 해 보고 키·느낌 말하면 반영.
 - 정식 배포됨: https://class-soccer.class-soccer.workers.dev (아이용 짧은 주소 https://is.gd/classsoccer, 선생님 `/teacher`). 11/10 수업에서 처음 씀.
 - 11/10 수업 중 고침·배포: 다 들어오니 렉 → 화면 전송 15번/초(계산은 30번)·틱 번호(n)로 시간 맞춰 140ms 늦춰 그림. 재접속 때 '같은 이름' 막혀 중복 생김 → 같은 노트북(cid)이거나 6초 조용한 창이면 자리 넘겨받기, 2초 살아있음 신호(p). 그래도 렉 → 내 선수 예측(키 누르면 바로 움직임, view.js `pred`) 추가 배포. **근본 원인: 학교 인터넷이 Cloudflare LAX로 붙음(왕복 약 0.35초, 가끔 1~2초).** 더 줄이려면 선생님 노트북을 학교 와이파이 안 서버로 쓰는 안이 남음(사용자에게 제안함). 다음 수업에서 렉·중복이 줄었는지 확인할 것.
-- 배포: 이 폴더에서 `npx wrangler deploy` (Cloudflare 계정 skyang9838@gmail.com). GitHub push는 배포가 아니다.
+- 배포: 이 폴더에서 `npx wrangler deploy` (Cloudflare 계정 skyang9838@gmail.com. 노트북도 11/14 로그인함). GitHub push는 배포가 아니다.
 - 시험: `npm test` (경기 계산·방 23개), `node scripts/bots.mjs <주소> 14 10` (가짜 아이 접속 시험), 혼자 해 볼 때 `node scripts/fill-bots.mjs <방코드> 7`.
 - 다음: 수업에서 써 본 뒤 사용자 피드백 반영. 에셋 후보(`_assets_candidates/`, gitignore)는 아직 안 씀 — 그림은 코드로 찍은 도트, 소리는 코드로 만든 8비트. 효과음·배경음악을 Juhani Junkala CC0 에셋으로 바꿀지 사용자에게 물을 것.
 
