@@ -59,7 +59,8 @@ input.field {
 input.field:focus { border-color: var(--gold); }
 
 /* 첫 화면 */
-.screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.screen { position: fixed; inset: 0; display: flex; padding: 16px; overflow-y: auto; }
+.screen > .box { margin: auto; }
 .title {
   font-family: Galmuri14, Galmuri11, sans-serif;
   font-size: 44px;

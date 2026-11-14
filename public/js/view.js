@@ -48,7 +48,8 @@ export function createView(root) {
   let ballSpin = 0;
   let lastBall = null;
   let paused = false;
-  let charge = null; // { a: 'pass'|'shoot', t0 }
+  const charges = new Map(); // 선수 id → { a: 'pass'|'shoot', t0 } (둘이서 모드는 둘 다)
+  let locals = new Set(); // 이 화면에서 조종하는 선수들 (둘이서 모드)
   let pred = null; // 내 선수 예측 위치
   let myIn = { dx: 0, dy: 0 };
   let rtt = 300;
@@ -94,21 +95,25 @@ export function createView(root) {
     } else ribbon.classList.add('hidden');
   }
 
-  function start(rosterList, youId) {
+  function start(rosterList, youId, opts = {}) {
     roster = new Map(rosterList.map((r) => [r.id, { ...r, hair: hairOf(r.name) }]));
     you = youId;
+    locals = new Set(opts.locals || (youId != null ? [youId] : []));
+    charges.clear();
     snaps = [];
     lastBall = null;
     paused = false;
     pred = null;
     banner.classList.add('hidden');
-    setRibbon(youId == null ? '관전 중' : '');
-    root.querySelector('[data-keys]').classList.toggle('hidden', youId == null);
+    setRibbon(locals.size ? '' : '관전 중');
+    const keys = root.querySelector('[data-keys]');
+    keys.textContent = opts.keys || '← ↑ → ↓ 움직이기 · Z 꾹 패스 (공 없으면 태클) · X 꾹 슛';
+    keys.classList.toggle('hidden', !locals.size);
     fit();
     if (you != null) {
       const me = roster.get(you);
       showBanner(`나는 ${TEAM[me.team].name} 팀!`, 1800, me.team);
-    }
+    } else if (opts.banner) showBanner(opts.banner, 2200, 'gold');
     startBgm();
     if (!running) {
       running = true;
@@ -127,15 +132,16 @@ export function createView(root) {
     else banner.classList.add('hidden');
   }
 
-  function myHasBall() {
+  function myHasBall(id = you) {
     const s = snaps[snaps.length - 1];
-    if (!s || you == null) return false;
-    const q = s.p.find((x) => x[0] === you);
+    if (!s || id == null) return false;
+    const q = s.p.find((x) => x[0] === id);
     return !!(q && q[8]);
   }
 
-  function setCharge(c) {
-    charge = c;
+  function setCharge(c, id = you) {
+    if (c) charges.set(id, c);
+    else charges.delete(id);
   }
 
   function setInput(dx, dy) {
@@ -283,6 +289,8 @@ export function createView(root) {
     tg.textBaseline = 'bottom';
     for (const p of players) {
       const mine = p.id === you;
+      const local = locals.has(p.id);
+      const charge = charges.get(p.id);
       const x = p.x * scale;
       const y = (p.y - 9) * scale;
       const w = tg.measureText(p.name).width + fs * 0.6;
@@ -299,7 +307,7 @@ export function createView(root) {
         }
         tg.font = `${fs}px Galmuri11, Galmuri9, sans-serif`;
       }
-      if (mine && charge) {
+      if (local && charge) {
         // 게이지: 이름표 위
         const v = Math.min(1, (performance.now() - charge.t0) / 1000);
         const gw = fs * 4.8;
@@ -316,10 +324,10 @@ export function createView(root) {
         tg.fillText(charge.a === 'shoot' ? '슛' : '패스', x - gw / 2 - fs * 1.1, gy + gh + 2);
         tg.font = `${fs}px Galmuri11, Galmuri9, sans-serif`;
       }
-      if (mine && !charge) {
+      if (local && !charge) {
         const bob = Math.sin(t * 6) * scale * 0.6;
         const ty = y - fs - 6 + bob;
-        tg.fillStyle = '#ffe14d';
+        tg.fillStyle = mine ? '#ffe14d' : p.team === 'red' ? '#ff6b6b' : '#5fa8ff';
         tg.strokeStyle = '#1a1c2c';
         tg.lineWidth = 2;
         tg.beginPath();

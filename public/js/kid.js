@@ -1,7 +1,7 @@
 import { createView } from './view.js';
 import { unlock, toggleMute, isMuted, play, stopBgm } from './sound.js';
 import { renderResult, renderLists } from './common.js';
-import { startSolo } from './solo.js';
+import { startSolo, startDuo } from './solo.js';
 
 const $ = (id) => document.getElementById(id);
 const screens = ['join', 'wait', 'game', 'result'];
@@ -17,6 +17,8 @@ let myId = null;
 let wantConnect = false;
 let retryTimer = null;
 let solo = null; // 혼자 연습 중이면 경기 조종기
+let duo = null; // 둘이서 1대1 중이면 경기 조종기
+let lastLocal = 'solo'; // 다시 하기 때 어느 모드로
 
 // 저장해 둔 코드·이름 (창을 닫았다 와도 바로)
 let saved = {};
@@ -69,8 +71,7 @@ $('joinForm').onsubmit = (e) => {
     localStorage.setItem('cs-kid', JSON.stringify(saved));
   } catch {}
   wantConnect = true;
-  if (solo) solo.stop();
-  solo = null;
+  stopLocal();
   $('soloAgain').classList.add('hidden');
   connect();
 };
@@ -195,7 +196,8 @@ function soloStart() {
   const name = $('name').value.trim() || '나';
   wantConnect = false;
   if (ws) ws.close();
-  if (solo) solo.stop();
+  stopLocal();
+  lastLocal = 'solo';
   $('soloAgain').classList.remove('hidden');
   solo = startSolo({
     name,
@@ -218,19 +220,107 @@ function soloStart() {
     },
   });
 }
-$('soloGo').onclick = soloStart;
-$('soloRetry').onclick = soloStart;
-$('soloHome').onclick = () => {
-  solo && solo.stop();
+function stopLocal() {
+  if (solo) solo.stop();
+  if (duo) duo.stop();
   solo = null;
+  duo = null;
+  duoHeld[1].clear();
+  duoHeld[2].clear();
+  duoCharge[1] = duoCharge[2] = null;
+}
+
+// ───── 둘이서 1대1 (한 컴퓨터, 빨강 WASD · 파랑 방향키)
+function duoStart() {
+  unlock();
+  play('click');
+  wantConnect = false;
+  if (ws) ws.close();
+  stopLocal();
+  lastLocal = 'duo';
+  $('soloAgain').classList.remove('hidden');
+  duo = startDuo({
+    names: ['1P', '2P'],
+    matchTime: Number($('duoT').value),
+    onMatch(roster) {
+      inMatch = true;
+      myId = null;
+      show('game');
+      view.start(roster, null, {
+        locals: [1, 2],
+        banner: '빨강 WASD vs 파랑 방향키!',
+        keys: '빨강: WASD · F 패스 · G 슛   |   파랑: 방향키 · . 패스 · / 슛   |   Esc 그만',
+      });
+    },
+    onSnap(s) {
+      view.push(s);
+    },
+    onEnd(r) {
+      leaveMatch();
+      $('resultBox').innerHTML = renderResult(r, null).replace('선생님이 다음 판을 준비하고 있어요', '둘이서 1대1 끝!');
+      show('result');
+    },
+  });
+}
+const DUO_MOVE = {
+  KeyA: [1, 'l'], KeyD: [1, 'r'], KeyW: [1, 'u'], KeyS: [1, 'd'],
+  ArrowLeft: [2, 'l'], ArrowRight: [2, 'r'], ArrowUp: [2, 'u'], ArrowDown: [2, 'd'],
+};
+const DUO_KICK = {
+  KeyF: [1, 'pass'], KeyG: [1, 'shoot'],
+  Period: [2, 'pass'], Slash: [2, 'shoot'], Numpad1: [2, 'pass'], Numpad2: [2, 'shoot'],
+};
+const duoHeld = { 1: new Set(), 2: new Set() };
+const duoCharge = { 1: null, 2: null };
+function duoSend(id) {
+  const h = duoHeld[id];
+  const dx = (h.has('r') ? 1 : 0) - (h.has('l') ? 1 : 0);
+  const dy = (h.has('d') ? 1 : 0) - (h.has('u') ? 1 : 0);
+  if (duo) duo.input(id, dx, dy);
+}
+function duoKeyDown(e) {
+  if (DUO_MOVE[e.code]) {
+    e.preventDefault();
+    const [id, d] = DUO_MOVE[e.code];
+    duoHeld[id].add(d);
+    duoSend(id);
+  } else if (DUO_KICK[e.code]) {
+    e.preventDefault();
+    const [id, a] = DUO_KICK[e.code];
+    if (e.repeat || duoCharge[id]) return;
+    if (a === 'pass' && !view.myHasBall(id)) return duo.kick(id, 'pass', 0.5); // 공 없으면 바로 태클
+    duoCharge[id] = { a, t0: performance.now() };
+    view.setCharge(duoCharge[id], id);
+  }
+}
+function duoKeyUp(e) {
+  if (DUO_MOVE[e.code]) {
+    const [id, d] = DUO_MOVE[e.code];
+    duoHeld[id].delete(d);
+    duoSend(id);
+  } else if (DUO_KICK[e.code]) {
+    const [id, a] = DUO_KICK[e.code];
+    const c = duoCharge[id];
+    if (!c || c.a !== a) return;
+    const power = Math.min(1, (performance.now() - c.t0) / 1000);
+    duoCharge[id] = null;
+    view.setCharge(null, id);
+    if (a === 'shoot' || view.myHasBall(id)) duo.kick(id, a, power);
+  }
+}
+
+$('soloGo').onclick = soloStart;
+$('duoGo').onclick = duoStart;
+$('soloRetry').onclick = () => (lastLocal === 'duo' ? duoStart() : soloStart());
+$('soloHome').onclick = () => {
+  stopLocal();
   $('soloAgain').classList.add('hidden');
   show('join');
 };
 window.addEventListener('keydown', (e) => {
-  // 연습 중 Esc = 그만하고 처음으로
-  if (solo && inMatch && e.code === 'Escape') {
-    solo.stop();
-    solo = null;
+  // 연습·둘이서 중 Esc = 그만하고 처음으로
+  if ((solo || duo) && inMatch && e.code === 'Escape') {
+    stopLocal();
     leaveMatch();
     $('soloAgain').classList.add('hidden');
     show('join');
@@ -259,6 +349,7 @@ function sendInput(force) {
 }
 
 window.addEventListener('keydown', (e) => {
+  if (duo && inMatch) return duoKeyDown(e);
   if (!inMatch || myId == null) return;
   if (KEYS[e.code]) {
     e.preventDefault();
@@ -277,6 +368,7 @@ window.addEventListener('keydown', (e) => {
   }
 });
 window.addEventListener('keyup', (e) => {
+  if (duo) return duoKeyUp(e);
   const a = e.code === 'KeyZ' || e.code === 'KeyJ' ? 'pass' : e.code === 'KeyX' || e.code === 'KeyK' ? 'shoot' : null;
   if (a && charge && charge.a === a) {
     const power = Math.min(1, (performance.now() - charge.t0) / 1000);
@@ -292,6 +384,14 @@ window.addEventListener('keyup', (e) => {
   }
 });
 window.addEventListener('blur', () => {
+  if (duo) {
+    for (const id of [1, 2]) {
+      duoHeld[id].clear();
+      duoCharge[id] = null;
+      view.setCharge(null, id);
+      duoSend(id);
+    }
+  }
   held.clear();
   charge = null;
   view.setCharge(null);
@@ -310,7 +410,7 @@ setInterval(() => {
   }
 }, 2000);
 // 키 입력이 사라져도 서버가 맞춰지게 가끔 다시 보낸다
-setInterval(() => inMatch && sendInput(true), 500);
+setInterval(() => inMatch && !duo && sendInput(true), 500);
 
 let toastEl = null;
 function toast(text) {

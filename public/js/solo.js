@@ -40,3 +40,37 @@ export function startSolo({ name, perTeam, level, matchTime, onMatch, onSnap, on
     },
   };
 }
+
+// 둘이서 1대1 — 한 컴퓨터에서 빨강(WASD) vs 파랑(방향키). AI 없음
+export function startDuo({ names = ['1P', '2P'], matchTime, onMatch, onSnap, onEnd }) {
+  const roster = [
+    { id: 1, name: names[0], team: 'red' },
+    { id: 2, name: names[1], team: 'blue' },
+  ];
+  const m = createMatch(roster, { kickoffTeam: Math.random() < 0.5 ? 'red' : 'blue', matchTime });
+  let paused = false;
+  onMatch(roster);
+  const timer = setInterval(() => {
+    if (paused) return;
+    step(m, TICK);
+    onSnap(snapshot(m));
+    if (m.phase === 'end') {
+      clearInterval(timer);
+      onEnd({ ...result(m), recorded: true, roster });
+    }
+  }, TICK * 1000);
+  return {
+    input(id, dx, dy) {
+      setInput(m, id, { dx, dy });
+    },
+    kick(id, a, power = 0.5) {
+      setInput(m, id, { pass: a === 'pass', shoot: a === 'shoot', power });
+    },
+    pause(on) {
+      paused = on;
+    },
+    stop() {
+      clearInterval(timer);
+    },
+  };
+}
