@@ -16,11 +16,15 @@ import {
   canStart,
   cleanName,
   cycleGender,
+  assignCheer,
+  cheerFor,
+  CHEERS,
 } from './room.js';
 
 const CLASS_NAME_MAX = 12;
 const SEND_EVERY = 2; // 경기 계산은 30번/초, 화면은 15번/초만 보낸다 (교실 와이파이 부담 줄이기)
 const STALE_MS = 6000; // 이만큼 아무 말 없는 창은 끊긴 것으로 본다 (아이 창은 2초마다 신호)
+const CHEER_GAP = 1200; // 응원은 한 아이당 1.2초에 한 번까지 (연타로 화면 덮지 않게)
 
 export default {
   async fetch(req, env) {
@@ -139,6 +143,8 @@ export class ClassRoom extends DurableObject {
     this.lastResult = null;
     this.n = 0; // 경기 틱 번호 (화면이 시간 맞추는 데 씀)
     this.pendingEv = [];
+    this.cheer = new Map(); // 이번 판 관전 아이 이름 → 응원하는 팀
+    this.cheerAt = new Map(); // 이름 → 마지막 응원 시각
   }
 
   meta(k) {
@@ -252,10 +258,20 @@ export class ClassRoom extends DurableObject {
 
   onKid(who, msg) {
     if (!this.match || this.view !== 'match' || this.paused) return;
+    if (msg.t === 'c') return this.onCheer(who.name);
     const id = this.matchIds.get(who.name);
     if (id == null) return;
     if (msg.t === 'i') setInput(this.match, id, { dx: msg.dx, dy: msg.dy });
     else if (msg.t === 'k') setInput(this.match, id, { pass: msg.a === 'pass', shoot: msg.a === 'shoot', power: msg.p ?? 0.5 });
+  }
+
+  onCheer(name) {
+    const team = this.cheer.get(name);
+    if (!team) return;
+    const now = Date.now();
+    if (now - (this.cheerAt.get(name) || 0) < CHEER_GAP) return;
+    this.cheerAt.set(name, now);
+    this.broadcast({ t: 'cheer', name, team, msg: CHEERS[Math.floor(Math.random() * CHEERS.length)] });
   }
 
   onTeacher(ws, msg) {
@@ -337,6 +353,9 @@ export class ClassRoom extends DurableObject {
     }
     this.match = createMatch(roster, { kickoffTeam: Math.random() < 0.5 ? 'red' : 'blue' });
     this.matchRoster = roster;
+    // 관전하는 아이는 랜덤으로 빨강·파랑 응원단
+    this.cheer = assignCheer(t.bench.filter((n) => this.roster.kids.get(n)?.connected));
+    this.cheerAt = new Map();
     this.view = 'match';
     this.paused = false;
     this.pendingEv = [];
@@ -351,7 +370,13 @@ export class ClassRoom extends DurableObject {
   sendMatchStart(w) {
     const who = this.sockets.get(w);
     const you = who && who.role === 'kid' ? this.matchIds.get(who.name) ?? null : null;
-    this.send(w, { t: 'match', roster: this.matchRoster, you, paused: this.paused });
+    let cheer = null;
+    if (who && who.role === 'kid' && you == null) {
+      // 경기 중에 들어온 관전 아이도 응원단에 넣는다
+      if (!this.cheer.has(who.name)) this.cheer.set(who.name, cheerFor(this.cheer));
+      cheer = this.cheer.get(who.name);
+    }
+    this.send(w, { t: 'match', roster: this.matchRoster, you, cheer, paused: this.paused });
   }
 
   startTimer() {
@@ -446,6 +471,7 @@ export class ClassRoom extends DurableObject {
       team: k.team,
       g: k.g,
       last: this.roster.round > 0 && k.lastPlayed === this.roster.round, // 방금 판에 뜀
+      n: k.played || 0, // 방을 연 뒤 뛴 판 수
     }));
     return { t: 'lobby', kids, view: this.view };
   }

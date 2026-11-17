@@ -128,6 +128,9 @@ function onMessage(msg) {
     case 's':
       if (inMatch) view.push(msg);
       break;
+    case 'cheer':
+      if (inMatch) view.cheer(msg);
+      break;
     case 'paused':
       paused = msg.on;
       $('pause').textContent = paused ? '▶ 이어 하기' : '⏸ 일시정지';
@@ -161,7 +164,7 @@ function renderLobby() {
   const chip = (k) => `
     <span class="chip ${k.team || ''} ${k.on ? '' : 'off'}">
       <button class="g ${k.g || 'none'}" data-gender="${esc(k.name)}" title="성별 고치기">${k.g === 'm' ? '♂' : k.g === 'f' ? '♀' : '?'}</button>
-      <button data-cycle="${esc(k.name)}" title="${k.last ? '방금 판에 뛴 아이' : '팀 바꾸기'}">${k.last ? '🔁' : ''}${esc(k.name)}${k.on ? '' : ' (나감)'}</button>
+      <button data-cycle="${esc(k.name)}" title="${k.last ? '방금 판에 뛴 아이' : '팀 바꾸기'}">${k.last ? '🔁' : ''}${esc(k.name)}<small class="pn" title="오늘 이 방에서 뛴 판 수">${k.n || 0}판</small>${k.on ? '' : ' (나감)'}</button>
       <button class="x" data-kick="${esc(k.name)}" title="내보내기">✕</button>
     </span>`;
   const red = kids.filter((k) => k.team === 'red');

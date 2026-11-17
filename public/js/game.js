@@ -73,6 +73,7 @@ export function createMatch(roster, opts = {}) {
     events: [],
     doubleAnnounced: false,
     kickoffTeam: opts.kickoffTeam ?? 'red',
+    rot: 0, // 골 날 때마다 1씩 → 킥오프 자리를 팀 안에서 한 칸씩 돌린다
   };
   placeKickoff(m, m.kickoffTeam);
   m.events.push({ e: 'whistle' });
@@ -93,7 +94,10 @@ function placeKickoff(m, team) {
   b.lastTouch = null;
   b.prevTouch = null;
   for (const side of ['red', 'blue']) {
-    const list = m.players.filter((p) => p.team === side);
+    // 자리 돌리기: 골이 날 때마다 팀 안에서 한 칸씩 밀어 맨 뒤·킥오프 자리를 돌아가며 맡는다
+    const all = m.players.filter((p) => p.team === side);
+    const r = all.length ? (m.rot || 0) % all.length : 0;
+    const list = all.slice(r).concat(all.slice(0, r));
     const dir = side === 'red' ? -1 : 1; // 자기 진영 쪽
     const slots = formation(list.length);
     list.forEach((p, i) => {
@@ -177,6 +181,7 @@ export function step(m, dt = TICK) {
     if (m.phaseTime <= 0) {
       if (m.time <= 0) return finish(m);
       const conceded = m.goals[m.goals.length - 1].team === 'red' ? 'blue' : 'red';
+      m.rot = (m.rot || 0) + 1;
       placeKickoff(m, conceded);
       m.phase = 'kickoff';
       m.phaseTime = KICKOFF_FREEZE;

@@ -148,9 +148,13 @@ function onMessage(msg) {
     case 'match':
       inMatch = true;
       myId = msg.you;
+      myCheer = msg.you == null ? msg.cheer || null : null;
       show('game');
-      view.start(msg.roster, msg.you);
+      view.start(msg.roster, msg.you, { cheer: myCheer, onCheer: sendCheer });
       view.setPaused(!!msg.paused);
+      break;
+    case 'cheer':
+      if (inMatch) view.cheer(msg);
       break;
     case 's':
       if (inMatch) view.push(msg);
@@ -170,10 +174,23 @@ function onMessage(msg) {
   }
 }
 
+// 관전 아이 응원 (서버가 1.2초에 한 번까지만 받는다)
+let myCheer = null;
+let lastCheer = 0;
+function sendCheer() {
+  if (!inMatch || myId != null || !myCheer || solo || duo) return;
+  const now = performance.now();
+  if (now - lastCheer < 1200) return;
+  lastCheer = now;
+  play('click');
+  if (ws && ws.readyState === 1) ws.send('{"t":"c"}');
+}
+
 function leaveMatch() {
   if (inMatch) view.stop();
   inMatch = false;
   myId = null;
+  myCheer = null;
   stopBgm();
   sendInput(true);
 }
@@ -350,6 +367,11 @@ function sendInput(force) {
 
 window.addEventListener('keydown', (e) => {
   if (duo && inMatch) return duoKeyDown(e);
+  if (inMatch && myId == null && myCheer && e.code === 'Space') {
+    e.preventDefault();
+    if (!e.repeat) sendCheer();
+    return;
+  }
   if (!inMatch || myId == null) return;
   if (KEYS[e.code]) {
     e.preventDefault();

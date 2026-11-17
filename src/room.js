@@ -31,7 +31,7 @@ export function join(roster, rawName, gender = null) {
     if (cleanGender(gender)) kid.g = cleanGender(gender);
     return { ok: true, kid, rejoined: true };
   }
-  const fresh = { name, connected: true, team: null, lastPlayed: -1, g: cleanGender(gender) };
+  const fresh = { name, connected: true, team: null, lastPlayed: -1, played: 0, g: cleanGender(gender) };
   roster.kids.set(name, fresh);
   return { ok: true, kid: fresh, rejoined: false };
 }
@@ -101,5 +101,33 @@ export function canStart(roster) {
 // 경기 시작 때 부른다: 뛴 아이 표시
 export function markPlayed(roster) {
   roster.round += 1;
-  for (const k of roster.kids.values()) if (k.team) k.lastPlayed = roster.round;
+  for (const k of roster.kids.values()) {
+    if (!k.team) continue;
+    k.lastPlayed = roster.round;
+    k.played = (k.played || 0) + 1; // 방을 연 뒤 뛴 판 수
+  }
 }
+
+// 관전하는 아이들을 빨강·파랑 응원단으로 랜덤하게 반씩 나눈다. 돌려주는 값: Map(이름 → 'red'|'blue')
+export function assignCheer(names, rnd = Math.random) {
+  const out = new Map();
+  const mixed = names
+    .map((n) => ({ n, r: rnd() }))
+    .sort((a, b) => a.r - b.r)
+    .map((x) => x.n);
+  const first = rnd() < 0.5 ? 'red' : 'blue'; // 홀수일 때 한 명 더 가는 쪽도 랜덤
+  const second = first === 'red' ? 'blue' : 'red';
+  mixed.forEach((n, i) => out.set(n, i % 2 === 0 ? first : second));
+  return out;
+}
+
+// 경기 중에 들어온 관전 아이: 사람이 적은 응원단으로 (같으면 랜덤)
+export function cheerFor(cheer, rnd = Math.random) {
+  let red = 0;
+  let blue = 0;
+  for (const t of cheer.values()) t === 'red' ? red++ : blue++;
+  if (red !== blue) return red < blue ? 'red' : 'blue';
+  return rnd() < 0.5 ? 'red' : 'blue';
+}
+
+export const CHEERS = ['힘내!', '가자!', '할 수 있어!', '골 넣자!', '막아라!', '최고야!', '파이팅!', '한 골만!'];

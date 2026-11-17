@@ -24,8 +24,10 @@ export function createView(root) {
         <div class="score blue"><b data-b>0</b><span class="tname">파랑</span></div>
       </div>
       <div class="keyhint" data-keys>← ↑ → ↓ 움직이기 · Z 꾹 패스 (공 없으면 태클) · X 꾹 슛</div>
+      <div class="cheers" data-cheers></div>
       <div class="banner hidden" data-banner></div>
       <div class="ribbon hidden" data-ribbon></div>
+      <button class="cheer-btn hidden" data-cheerbtn type="button">📣 응원하기 (스페이스)</button>
     </div>`;
   const px = root.querySelector('canvas.px');
   const tags = root.querySelector('canvas.tags');
@@ -38,6 +40,10 @@ export function createView(root) {
   const hud = { r: el('[data-r]'), b: el('[data-b]'), t: el('[data-t]'), dbl: el('[data-dbl]') };
   const banner = el('[data-banner]');
   const ribbon = el('[data-ribbon]');
+  const cheersEl = el('[data-cheers]');
+  const cheerBtn = el('[data-cheerbtn]');
+  let onCheer = null;
+  cheerBtn.onclick = () => onCheer && onCheer();
 
   let roster = new Map(); // id → { name, team, hair }
   let you = null;
@@ -105,7 +111,13 @@ export function createView(root) {
     paused = false;
     pred = null;
     banner.classList.add('hidden');
-    setRibbon(locals.size ? '' : '관전 중');
+    cheersEl.innerHTML = '';
+    const cheer = opts.cheer && TEAM[opts.cheer] ? opts.cheer : null;
+    onCheer = cheer ? opts.onCheer || null : null;
+    setRibbon(locals.size ? '' : cheer ? `📣 나는 ${TEAM[cheer].name} 응원단` : '관전 중');
+    ribbon.classList.toggle('red', cheer === 'red');
+    ribbon.classList.toggle('blue', cheer === 'blue');
+    cheerBtn.className = 'cheer-btn ' + (cheer || 'hidden');
     const keys = root.querySelector('[data-keys]');
     keys.textContent = opts.keys || '← ↑ → ↓ 움직이기 · Z 꾹 패스 (공 없으면 태클) · X 꾹 슛';
     keys.classList.toggle('hidden', !locals.size);
@@ -113,7 +125,8 @@ export function createView(root) {
     if (you != null) {
       const me = roster.get(you);
       showBanner(`나는 ${TEAM[me.team].name} 팀!`, 1800, me.team);
-    } else if (opts.banner) showBanner(opts.banner, 2200, 'gold');
+    } else if (cheer) showBanner(`📣 ${TEAM[cheer].name} 응원단!`, 2200, cheer);
+    else if (opts.banner) showBanner(opts.banner, 2200, 'gold');
     startBgm();
     if (!running) {
       running = true;
@@ -123,7 +136,24 @@ export function createView(root) {
 
   function stop() {
     running = false;
+    onCheer = null;
+    cheerBtn.className = 'cheer-btn hidden';
+    cheersEl.innerHTML = '';
     stopBgm();
+  }
+
+  // 응원 말풍선: 응원하는 팀 쪽 경기장 위에 떴다가 사라진다
+  function cheer({ name, team, msg }) {
+    if (!TEAM[team]) return;
+    while (cheersEl.children.length >= 10) cheersEl.firstChild.remove();
+    const d = document.createElement('div');
+    d.className = 'cheer-pop ' + team;
+    d.textContent = `📣 ${name}: ${TEAM[team].name} ${msg}`;
+    const half = team === 'red' ? 0 : 50;
+    d.style.left = half + 8 + Math.random() * 34 + '%';
+    d.style.top = 22 + Math.random() * 50 + '%';
+    cheersEl.appendChild(d);
+    setTimeout(() => d.remove(), 2400);
   }
 
   function setPaused(on) {
@@ -341,5 +371,5 @@ export function createView(root) {
     }
   }
 
-  return { start, stop, push, setPaused, showBanner, fit, myHasBall, setCharge, setInput, setRtt };
+  return { start, stop, push, setPaused, showBanner, fit, myHasBall, setCharge, setInput, setRtt, cheer };
 }
